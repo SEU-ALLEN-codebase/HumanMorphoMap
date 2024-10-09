@@ -130,6 +130,7 @@ def joint_distributions(gf_file, meta_file, min_neurons=5, feature_reducer='UMAP
                     hue='patient', marginal_kws={'common_norm':False, 'fill': False},
                     joint_kws={'alpha':1.}
                 )
+                plt.legend(frameon=False, ncol=1, handletextpad=0, markerscale=1.5)
                 plt.xticks([]); plt.yticks([])
                 plt.savefig(f'{feature_reducer.lower()}_{region_i}.png', dpi=300)
                 plt.close()
