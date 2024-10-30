@@ -67,12 +67,12 @@ def soma_converter(swcfile, out_dir):
 in_dir = './CNG_version'
 out_dir = './one_point_soma'
 error_files = set(
-    ['H16-03-007-01-01-08-01_564395300_m.CNG.swc', # broken file
-     'cell1_sorted_Scaled.CNG.swc', # those cells are problematics: 1) incorrect soma format; 2) wrong radius of soma
-     'cell3_sorted_Scaled.CNG.swc', 
-     'cell5_sorted_Scaled.CNG.swc',
-     'cell2_sorted_Scaled.CNG.swc', 
-     'cell4_PV_sorted_Scaled.CNG.swc']
+    ['H16-03-007-01-01-08-01_564395300_m.swc', # broken file
+     'cell1_sorted_Scaled.swc', # those cells are problematics: 1) incorrect soma format; 2) wrong radius of soma
+     'cell3_sorted_Scaled.swc', 
+     'cell5_sorted_Scaled.swc',
+     'cell2_sorted_Scaled.swc', 
+     'cell4_PV_sorted_Scaled.swc']
 )
 
 for infile in glob.glob(os.path.join(in_dir, '*.swc')):
