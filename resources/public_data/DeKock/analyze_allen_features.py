@@ -20,18 +20,19 @@ sys.path.append('../../../src')
 from config import standardize_features
 
 from global_features import FEAT_NAME_DICT
+from ml.feature_processing import clip_outliners
 
 LOCAL_FEATS = [
     'Stems',
     'SomaSurface',
-    'AverageContraction',
+    #'AverageContraction',
     'AverageBifurcationAngleLocal',
     'AverageBifurcationAngleRemote',
     'AverageParent-daughterRatio',
 ]
 
 
-def load_features(gf_file, meta_file, col_reg='layer', min_neurons=5, standardize=False, remove_na=True, surface_sqrt=True):
+def load_features(gf_file, meta_file, col_reg='layer', min_neurons=5, standardize=False, remove_na=True):
     # Loading the data
     df = pd.read_csv(gf_file, index_col=0)[LOCAL_FEATS]
     
@@ -53,8 +54,8 @@ def load_features(gf_file, meta_file, col_reg='layer', min_neurons=5, standardiz
     rs_filtered = rs[rcnts >= min_neurons]
     dff = df[df.region.isin(rs_filtered)]
 
-    if surface_sqrt:
-        df['SomaSurface'] = np.sqrt(df.SomaSurface)
+    #if surface_sqrt:
+    #    df['SomaSurface'] = np.sqrt(df.SomaSurface)
     
     # standardize column-wise
     if standardize:
@@ -142,13 +143,15 @@ def joint_distributions(gf_file, meta_file, col_reg='layer', min_neurons=5, feat
     plt.savefig(f'{feature_reducer.lower()}_all.png', dpi=300)
     plt.close()
 
-def predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='layer', min_neurons=5, surface_sqrt=True):
+def predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='layer', min_neurons=5, thresholding_outliners=False):
     random.seed(1024)
 
     print('--> Loading the data')
-    df = load_features(gf_file, meta_file, col_reg=col_reg, min_neurons=min_neurons, standardize=True, surface_sqrt=surface_sqrt)
-
+    df = load_features(gf_file, meta_file, col_reg=col_reg, min_neurons=min_neurons, standardize=True)
     players = ['L2/3', 'L4', 'L5/6']
+    # save to file for debugging
+    #df.to_csv(f'{gf_file}_standardized.csv'); sys.exit()
+    
     pmapper = dict(zip(players, np.arange(len(players))))
 
     df = df[df.region.isin(players)]
@@ -196,11 +199,14 @@ def predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='layer',
     # remove na values
     df_pred_nona = df_pred[df_pred.isna().sum(axis=1) == 0]
     # standardize the features
-    if surface_sqrt:
-        df_pred_nona['SomaSurface'] = np.sqrt(df_pred_nona.SomaSurface)
-
+    #if surface_sqrt:
+    #    df_pred_nona['SomaSurface'] = np.sqrt(df_pred_nona.SomaSurface)
+    
     # standardize column-wise
     standardize_features(df_pred_nona, cls_feats, inplace=True)
+    if thresholding_outliners:
+        clip_outliners(df_pred_nona, inplace=False)
+    
     preds = clf.predict(df_pred_nona)
     # save the prediction
     pred_layers = np.array(players)[preds]
@@ -224,6 +230,6 @@ if __name__ == '__main__':
     if 1:
         # test the prediction of layers according to morphological features
         gf_file_pred = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/ptls10.csv'
-        pred_file = 'predicted_layers.csv'
-        predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='coarse_layer')
+        pred_file = 'predicted_layers_thresholding_outliners.csv'
+        predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='coarse_layer', thresholding_outliners=True)
 

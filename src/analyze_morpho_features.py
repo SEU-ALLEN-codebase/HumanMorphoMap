@@ -15,10 +15,12 @@ from sklearn.decomposition import PCA
 
 from config import standardize_features
 
+from spatial import spatial_utils   # pylib
+
 LOCAL_FEATS = [
     'N_stem',
     'Soma_surface',
-    'Average Contraction',
+    #'Average Contraction',
     'Average Bifurcation Angle Local',
     'Average Bifurcation Angle Remote',
     'Average Parent-daughter Ratio',
@@ -40,7 +42,9 @@ def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_n
     dff = df[df.region.isin(rs_filtered)]
     if remove_na:
         dff = dff[dff.isna().sum(axis=1) == 0]
-    
+    #if surface_sqrt:
+    #    dff['Soma_surface'] = np.sqrt(dff.Soma_surface)
+
     # standardize column-wise
     if standardize:
         standardize_features(dff, LOCAL_FEATS, inplace=True)
@@ -71,14 +75,33 @@ def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5):
         plt.savefig(f'{prefix}_{feat.replace(" ", "")}.png', dpi=300)
         plt.close()
 
-def joint_distributions(gf_file, meta_file, min_neurons=5, feature_reducer='UMAP'):
+def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP'):
+
+    #----------------- helper functions --------------------#
+    def sns_jointplot(data, x, y, xlim, ylim, hue, out_fig, markersize=10):
+        g = sns.jointplot(
+            data=data, x=x, y=y, kind='scatter', xlim=xlim, ylim=ylim,
+            hue=hue,
+            joint_kws={'s': markersize, 'alpha': 0.85},
+            marginal_kws={'common_norm':False, 'fill': False, }
+        )
+        # customize the legend for better visiblity
+        g.ax_joint.legend(markerscale=15/markersize, labelspacing=0.2, handletextpad=0, frameon=False)
+        
+        plt.xticks([]); plt.yticks([])
+        plt.savefig(out_fig, dpi=300)
+        plt.close()
+    #--------------- End of helper functions ---------------#
+
+
     sns.set_theme(style='ticks', font_scale=1.5)
 
     df = load_features(gf_file, meta_file, min_neurons=min_neurons, standardize=True)
 
     cache_file = f'cache_{feature_reducer.lower()}.pkl'
     # map to the UMAP space
-    if os.path.exists(cache_file):
+    use_precomputed_model = True
+    if use_precomputed_model and os.path.exists(cache_file):
         print(f'--> Loading existing {feature_reducer} file')
         with open(cache_file, 'rb') as fp:
             emb = pickle.load(fp)
@@ -89,7 +112,6 @@ def joint_distributions(gf_file, meta_file, min_neurons=5, feature_reducer='UMAP
             reducer = PCA(n_components=2)
 
         emb = reducer.fit_transform(df[LOCAL_FEATS])
-        print(reducer.explained_variance_ratio_)
         with open(cache_file, 'wb') as fp:
             pickle.dump(emb, fp)
     
@@ -100,60 +122,68 @@ def joint_distributions(gf_file, meta_file, min_neurons=5, feature_reducer='UMAP
     indices = [0, 4, 6, 8, 11, 14, 16, 20, 23, 25, 29]
 
     if feature_reducer == 'UMAP':
-        xlim, ylim = (-2,13), (0, 9)
+        xlim, ylim = (-4,14), (0, 10)
     elif feature_reducer == 'PCA':
         xlim, ylim = (-6,6), (-6,6)
 
-    ii = 0
-    for i1, i2 in zip(indices[:-1], indices[1:]):
-        cur_regions = sregions[i1:i2]
-        cur_df = df[df.region.isin(cur_regions)]
-        print(i1, i2, cur_regions)
-        sns.jointplot(data=cur_df, x=key1, y=key2, kind='scatter', xlim=xlim, ylim=ylim, 
-                      hue='region', marginal_kws={'common_norm': False, 'fill': False},
-                      joint_kws={'alpha':1.},
-                      )
-        plt.legend(frameon=False, ncol=1, handletextpad=0, markerscale=1.5)
-        plt.xticks([])
-        plt.yticks([])
-        plt.savefig(f'{feature_reducer.lower()}_{ii:02d}.png', dpi=300)
-        plt.close()
+    if 0:
+        ii = 0
+        for i1, i2 in zip(indices[:-1], indices[1:]):
+            cur_regions = sregions[i1:i2]
+            cur_df = df[df.region.isin(cur_regions)]
+            print(i1, i2, cur_regions)
+            print(f'--> Comparing feature distribution across brain regions')
+            out_fig = f'{feature_reducer.lower()}_{ii:02d}.png'
+            sns_jointplot(cur_df, key1, key2, xlim, ylim, 'region', out_fig, markersize=10)
 
-        # visualize the variances across different person
-        for region_i in cur_regions:
-            df_i = cur_df[cur_df.region == region_i]
-            patients_i = df_i.patient
-            ps = np.unique(patients_i)
-            if ps.shape[0] > 1:
-                # plot the comparison of different samples of the same region
-                sns.jointplot(data=df_i, x=key1, y=key2, kind='scatter', xlim=xlim, ylim=ylim,
-                    hue='patient', marginal_kws={'common_norm':False, 'fill': False},
-                    joint_kws={'alpha':1.}
-                )
-                plt.legend(frameon=False, ncol=1, handletextpad=0, markerscale=1.5)
-                plt.xticks([]); plt.yticks([])
-                plt.savefig(f'{feature_reducer.lower()}_{region_i}.png', dpi=300)
-                plt.close()
-                
-            
+            # visualize the variances across different person
+            print(f'==> Comparing feature distributions across patients')
+            for region_i in cur_regions:
+                df_i = cur_df[cur_df.region == region_i]
+                patients_i = df_i.patient
+                ps = np.unique(patients_i)
+                if ps.shape[0] > 1:
+                    # plot the comparison of different samples of the same region
+                    out_fig = f'{feature_reducer.lower()}_{region_i}.png'
+                    sns_jointplot(df_i, key1, key2, xlim, ylim, 'patient', out_fig, markersize=10)
+        
+            ii += 1
+
+    if layer_file is None:
+        hue = None
+    else:
+        hue = 'layer'
+
+    if 1:
+        # For debug only
+        dekock_file = '../resources/public_data/DeKock/gf_150um.csv_standardized.csv'
+        df_dekock = pd.read_csv(dekock_file, index_col=0)
+        # get the embedding for dekock data
+        dekock_emb = reducer.fit_transform(df_dekock.iloc[:,:5])
+        df_dekock[[key1, key2]] = dekock_emb
+        out_fig = 'dekock_umap.png'
+        sns_jointplot(df_dekock, key1, key2, xlim, ylim, 'region', out_fig, markersize=10)
+        sys.exit()
+
+    # left-right of the region in brain
+    lr = [region[-1] for region in df.region]
+    df['lr'] = lr
     
-        ii += 1
-
+    layers = pd.read_csv(layer_file, index_col=0)
+    df['layer'] = layers.loc[df.index]
+    # Estimate the spatial auto-correlation
+    layers_int = df.layer.map(dict((item, ind) for ind, item in enumerate(np.unique(df.layer))))
+    moran_score = spatial_utils.moranI_score(df[[key1,key2]], feats=layers_int.values, weight_type='knn')
+    print(f"The Moran's Index score for layer prediction is {moran_score:.3f}")
+    
     # also for all neurons
-    sns.jointplot(
-        data=df, x=key1, y=key2, kind='scatter', xlim=xlim, ylim=ylim,
-        joint_kws={'s': 1, 'alpha': 0.5},
-        marginal_kws={'common_norm':False, 'fill': False, }
-    )
-    plt.xticks([]); plt.yticks([])
-    plt.savefig(f'{feature_reducer.lower()}_all.png', dpi=300)
-    plt.close()
-
-    print()
+    out_fig = f'{feature_reducer.lower()}_all.png'
+    sns_jointplot(df, key1, key2, xlim, ylim, hue, out_fig, markersize=5)
 
 
 if __name__ == '__main__':
 
+    gf_file = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/ptls10.csv'
     if 0:   # temporary
         from global_features import calc_global_features_from_folder
         swc_dir = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/source500'
@@ -161,8 +191,9 @@ if __name__ == '__main__':
         calc_global_features_from_folder(swc_dir, outfile)
 
     if 1:
-        gf_file = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/ptls10.csv'
         meta_file = '../meta/neuron_info_9060_utf8_curated0929.csv'
-        #feature_distributions(gf_file, meta_file)
-        joint_distributions(gf_file, meta_file, feature_reducer='UMAP')
+        layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
+        #feature_distributions(gf_file, meta_file, min_neurons=5)
+        joint_distributions(gf_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0)
+
 
