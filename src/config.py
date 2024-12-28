@@ -4,6 +4,15 @@
 #Description:               
 ##########################################################
 
+LOCAL_FEATS = [
+    'N_stem',
+    'Soma_surface',
+    #'Average Contraction',
+    'Average Bifurcation Angle Local',
+    'Average Bifurcation Angle Remote',
+    'Average Parent-daughter Ratio',
+]
+
 def standardize_features(dfc, feat_names, epsilon=1e-8, inplace=True):
     fvalues = dfc[feat_names]
     fvalues = (fvalues - fvalues.mean()) / (fvalues.std() + epsilon)

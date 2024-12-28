@@ -13,18 +13,12 @@ import seaborn as sns
 import umap
 from sklearn.decomposition import PCA
 
-from config import standardize_features
+from config import standardize_features, LOCAL_FEATS
 
 from spatial import spatial_utils   # pylib
+from ml.feature_processing import clip_outliners
+from plotters.customized_plotters import sns_jointplot
 
-LOCAL_FEATS = [
-    'N_stem',
-    'Soma_surface',
-    #'Average Contraction',
-    'Average Bifurcation Angle Local',
-    'Average Bifurcation Angle Remote',
-    'Average Parent-daughter Ratio',
-]
 
 def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True):
     # Loading the data
@@ -37,6 +31,7 @@ def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_n
     df['region'] = meta[col_reg]
     df['patient'] = meta['病人编号']
     # filter brain regions with number of neurons smaller than `min_neurons`
+    import ipdb; ipdb.set_trace()
     rs, rcnts = np.unique(df.region, return_counts=True)
     rs_filtered = rs[rcnts >= min_neurons]
     dff = df[df.region.isin(rs_filtered)]
@@ -75,25 +70,8 @@ def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5):
         plt.savefig(f'{prefix}_{feat.replace(" ", "")}.png', dpi=300)
         plt.close()
 
+
 def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP'):
-
-    #----------------- helper functions --------------------#
-    def sns_jointplot(data, x, y, xlim, ylim, hue, out_fig, markersize=10):
-        g = sns.jointplot(
-            data=data, x=x, y=y, kind='scatter', xlim=xlim, ylim=ylim,
-            hue=hue,
-            joint_kws={'s': markersize, 'alpha': 0.85},
-            marginal_kws={'common_norm':False, 'fill': False, }
-        )
-        # customize the legend for better visiblity
-        g.ax_joint.legend(markerscale=15/markersize, labelspacing=0.2, handletextpad=0, frameon=False)
-        
-        plt.xticks([]); plt.yticks([])
-        plt.savefig(out_fig, dpi=300)
-        plt.close()
-    #--------------- End of helper functions ---------------#
-
-
     sns.set_theme(style='ticks', font_scale=1.5)
 
     df = load_features(gf_file, meta_file, min_neurons=min_neurons, standardize=True)
@@ -127,6 +105,7 @@ def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feat
         xlim, ylim = (-6,6), (-6,6)
 
     if 0:
+        # visualize the effect of patients and regions
         ii = 0
         for i1, i2 in zip(indices[:-1], indices[1:]):
             cur_regions = sregions[i1:i2]
@@ -149,21 +128,12 @@ def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feat
         
             ii += 1
 
+
+    # visualize the layer distribution
     if layer_file is None:
         hue = None
     else:
         hue = 'layer'
-
-    if 1:
-        # For debug only
-        dekock_file = '../resources/public_data/DeKock/gf_150um.csv_standardized.csv'
-        df_dekock = pd.read_csv(dekock_file, index_col=0)
-        # get the embedding for dekock data
-        dekock_emb = reducer.fit_transform(df_dekock.iloc[:,:5])
-        df_dekock[[key1, key2]] = dekock_emb
-        out_fig = 'dekock_umap.png'
-        sns_jointplot(df_dekock, key1, key2, xlim, ylim, 'region', out_fig, markersize=10)
-        sys.exit()
 
     # left-right of the region in brain
     lr = [region[-1] for region in df.region]
@@ -179,11 +149,54 @@ def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feat
     # also for all neurons
     out_fig = f'{feature_reducer.lower()}_all.png'
     sns_jointplot(df, key1, key2, xlim, ylim, hue, out_fig, markersize=5)
+    import ipdb; ipdb.set_trace()
+    print()
+
+
+
+def coembedding_dekock_seu(gf_seu_file, meta_seu_file, layer_seu_file, gf_dekock_file):
+    df_seu = load_features(gf_seu_file, meta_file, min_neurons=0, standardize=True)
+    # clip outliners
+    clip_outliners(df_seu, col_ids=np.arange(df_seu.shape[1]-2))
+    df_dekock = pd.read_csv(gf_dekock_file, index_col=0)
+
+    # concatenate two datasets
+    tmp_cache = 'tmp_reducer.pkl'
+    if os.path.exists(tmp_cache):
+        with open(tmp_cache, 'rb') as fp:
+            reducer = pickle.load(fp)
+    else:
+        data = np.vstack((df_seu.iloc[:, :5], df_dekock.iloc[:,:5]))
+        reducer = umap.UMAP(random_state=1024)
+        reducer.fit(data)
+
+        with open(tmp_cache, 'wb') as fp:
+            pickle.dump(reducer, fp)
+
+    emb_seu = reducer.transform(df_seu.iloc[:, :5])
+    emb_dekock = reducer.transform(df_dekock.iloc[:, :5])
+
+    key1, key2 = 'UMAP1', 'UMAP2'
+    xlim, ylim = (-4,14), (0, 10)
+    
+    # get the embedding for dekock data
+    df_dekock[[key1, key2]] = emb_dekock
+    out_fig = 'umap_coembedding_dekock.png'
+    sns_jointplot(df_dekock, key1, key2, xlim, ylim, 'region', out_fig, markersize=40)
+    # for ourdata
+    df_seu[[key1, key2]] = emb_seu
+    layers = pd.read_csv(layer_seu_file, index_col=0)
+    df_seu['layer'] = layers.loc[df_seu.index]
+    out_fig = 'umap_coembedding_seu.png'
+    sns_jointplot(df_seu, key1, key2, xlim, ylim, 'layer', out_fig, markersize=5)
+
 
 
 if __name__ == '__main__':
 
-    gf_file = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/ptls10.csv'
+    gf_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
+    meta_file = '../meta/neuron_info_9060_utf8_curated0929.csv'
+    layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
     if 0:   # temporary
         from global_features import calc_global_features_from_folder
         swc_dir = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/source500'
@@ -191,9 +204,11 @@ if __name__ == '__main__':
         calc_global_features_from_folder(swc_dir, outfile)
 
     if 1:
-        meta_file = '../meta/neuron_info_9060_utf8_curated0929.csv'
-        layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
         #feature_distributions(gf_file, meta_file, min_neurons=5)
         joint_distributions(gf_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0)
+    
+    if 0:
+        gf_dekock_file = '../resources/public_data/DeKock/gf_150um.csv_standardized.csv'
+        coembedding_dekock_seu(gf_file, meta_file, layer_file, gf_dekock_file)
 
 

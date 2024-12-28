@@ -205,7 +205,7 @@ def predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='layer',
     # standardize column-wise
     standardize_features(df_pred_nona, cls_feats, inplace=True)
     if thresholding_outliners:
-        clip_outliners(df_pred_nona, inplace=False)
+        clip_outliners(df_pred_nona)
     
     preds = clf.predict(df_pred_nona)
     # save the prediction
@@ -229,7 +229,7 @@ if __name__ == '__main__':
 
     if 1:
         # test the prediction of layers according to morphological features
-        gf_file_pred = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/ptls10.csv'
+        gf_file_pred = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
         pred_file = 'predicted_layers_thresholding_outliners.csv'
         predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='coarse_layer', thresholding_outliners=True)
 
