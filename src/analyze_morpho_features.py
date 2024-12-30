@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import umap
 from sklearn.decomposition import PCA
+import scipy.cluster.hierarchy as sch
 
 from config import standardize_features, LOCAL_FEATS
 
@@ -20,18 +21,24 @@ from ml.feature_processing import clip_outliners
 from plotters.customized_plotters import sns_jointplot
 
 
-def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True):
+def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True, use_local_features=True):
     # Loading the data
-    df = pd.read_csv(gf_file, index_col=0)[LOCAL_FEATS]
+    df = pd.read_csv(gf_file, index_col=0)
+    
+    if use_local_features:
+        fnames = LOCAL_FEATS
+    else:
+        fnames = df.columns
+
+    df = df[fnames]
+    
     meta = pd.read_csv(meta_file, index_col=0)
-    col_reg = '脑区'
-    col_xy = 'xy拍摄分辨率(*10e-3μm/px)'
+    col_reg = 'brain_region'
     # 
     sns.set_theme(style='ticks', font_scale=1)
     df['region'] = meta[col_reg]
-    df['patient'] = meta['病人编号']
+    df['patient'] = meta['patient_id']
     # filter brain regions with number of neurons smaller than `min_neurons`
-    import ipdb; ipdb.set_trace()
     rs, rcnts = np.unique(df.region, return_counts=True)
     rs_filtered = rs[rcnts >= min_neurons]
     dff = df[df.region.isin(rs_filtered)]
@@ -42,36 +49,46 @@ def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_n
 
     # standardize column-wise
     if standardize:
-        standardize_features(dff, LOCAL_FEATS, inplace=True)
+        standardize_features(dff, fnames, inplace=True)
     return dff
 
 
-def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5):
+def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5, immuno_id=None):
     df = load_features(gf_file, meta_file, min_neurons=min_neurons)
     sregions = sorted(np.unique(df.region))
-    for feat in LOCAL_FEATS:
-        dfi = df[[feat, 'region']]
-        if boxplot:
-            sns.boxplot(data=dfi, x='region', y=feat, hue='region', order=sregions)
-            prefix = 'boxplot'
-        else:
-            sns.stripplot(data=dfi, x='region', y=feat, s=3, alpha=0.5, hue='region', order=sregions)
-            prefix = 'stripplot'
-        plt.xticks(rotation=90, rotation_mode='anchor', ha='right', va='center')
-        if feat.startswith('Average Bifurcation Angle'):
-            plt.ylim(30, 110)
-        elif feat.startswith('Average Parent'):
-            plt.ylim(0.5, 1.2)
-        elif feat.startswith('Average Contraction'):
-            plt.ylim(0.9, 1.0)
+    ly_mask = df.index <= immuno_id+1
+    for stain in ['ly', 'immuno', 'all']:
+        for feat in LOCAL_FEATS:
+            if stain == 'ly':
+                dfi = df[[feat, 'region']][ly_mask]
+            elif stain == 'immuno':
+                dfi = df[[feat, 'region']][~ly_mask]
+            elif stain == 'all':
+                dfi = df[[feat, 'region']]
+            else:
+                raise ValueError
+
+            if boxplot:
+                sns.boxplot(data=dfi, x='region', y=feat, hue='region', order=sregions)
+                prefix = 'boxplot'
+            else:
+                sns.stripplot(data=dfi, x='region', y=feat, s=3, alpha=0.5, hue='region', order=sregions)
+                prefix = 'stripplot'
+            plt.xticks(rotation=90, rotation_mode='anchor', ha='right', va='center')
+            if feat.startswith('Average Bifurcation Angle'):
+                plt.ylim(30, 110)
+            elif feat.startswith('Average Parent'):
+                plt.ylim(0.5, 1.2)
+            elif feat.startswith('Average Contraction'):
+                plt.ylim(0.9, 1.0)
 
 
-        plt.subplots_adjust(bottom=0.28)
-        plt.savefig(f'{prefix}_{feat.replace(" ", "")}.png', dpi=300)
-        plt.close()
+            plt.subplots_adjust(bottom=0.28)
+            plt.savefig(f'{prefix}_{feat.replace(" ", "")}_{stain}.png', dpi=300)
+            plt.close()
 
 
-def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP'):
+def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP', immuno_id=None):
     sns.set_theme(style='ticks', font_scale=1.5)
 
     df = load_features(gf_file, meta_file, min_neurons=min_neurons, standardize=True)
@@ -146,11 +163,15 @@ def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feat
     moran_score = spatial_utils.moranI_score(df[[key1,key2]], feats=layers_int.values, weight_type='knn')
     print(f"The Moran's Index score for layer prediction is {moran_score:.3f}")
     
-    # also for all neurons
+    df_ly = df[df.index <= immuno_id+1]
+    df_im = df[df.index > immuno_id+1]
+    # plot LY and immuno separately
+    out_fig = f'{feature_reducer.lower()}_LY.png'
+    sns_jointplot(df_ly, key1, key2, xlim, ylim, hue, out_fig, markersize=5)
+    out_fig = f'{feature_reducer.lower()}_immuno.png'
+    sns_jointplot(df_im, key1, key2, xlim, ylim, hue, out_fig, markersize=5)
     out_fig = f'{feature_reducer.lower()}_all.png'
     sns_jointplot(df, key1, key2, xlim, ylim, hue, out_fig, markersize=5)
-    import ipdb; ipdb.set_trace()
-    print()
 
 
 
@@ -191,24 +212,68 @@ def coembedding_dekock_seu(gf_seu_file, meta_seu_file, layer_seu_file, gf_dekock
     sns_jointplot(df_seu, key1, key2, xlim, ylim, 'layer', out_fig, markersize=5)
 
 
+def clustering(gf_file, meta_file, layer_file=None):
+    sns.set_theme(style='ticks', font_scale=1.5)
+
+    # use all features. This is because we have standardized the neurons
+    df = load_features(gf_file, meta_file, min_neurons=0, standardize=True, use_local_features=False)
+    layers = pd.read_csv(layer_file, index_col=0)
+
+
+    df22 = df.iloc[:,:22].copy()    # features
+    # clip the data for extreme values, as this is mostly deficiency in reconstruction
+    dfc22 = df22.clip(-3, 3)
+    # Do clustering
+    clustmap = sns.clustermap(dfc22, cmap='bwr')
+    # get the clusters
+    row_linkage = clustmap.dendrogram_row.linkage
+    row_clusters = sch.fcluster(row_linkage, t=100, criterion='maxclust')
+    # the the clustermaping
+    id2map = pd.DataFrame(np.transpose([dfc22.index, row_clusters]), columns=('idx', 'cluster')).set_index('idx')
+    # index after clsuter map
+    reordered_ind = clustmap.dendrogram_row.reordered_ind
+    # dict(zip(*np.unique(row_clusters, return_counts=True)))
+    # print original status
+    orig_layer_distr = np.unique(layers, return_counts=True)
+    print(f'Layer distribution of all neurons: {orig_layer_distr}')
+
+    # major clusters
+    c65 = id2map.cluster == 65
+    c65_ids = c65.index[c65]
+    print('c65: ', np.unique(layers.loc[c65_ids], return_counts=True))
+    c79 = id2map.cluster == 79
+    c79_ids = c79.index[c79]
+    print('c79: ', np.unique(layers.loc[c79_ids], return_counts=True))
+    c99 = id2map.cluster == 99
+    c99_ids = c99.index[c99]
+     print('c99: ', np.unique(layers.loc[c99_ids], return_counts=True))
+    import ipdb; ipdb.set_trace()
+    print()
+    
+    
+
 
 if __name__ == '__main__':
 
     gf_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
-    meta_file = '../meta/neuron_info_9060_utf8_curated0929.csv'
+    meta_file = '/data/kfchen/trace_ws/paper_trace_result/csv_copy/final_neuron_info.csv'
     layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
+    immuno_id = 6208
     if 0:   # temporary
         from global_features import calc_global_features_from_folder
         swc_dir = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/source500'
         outfile = 'gf_temp.csv'
         calc_global_features_from_folder(swc_dir, outfile)
 
-    if 1:
-        #feature_distributions(gf_file, meta_file, min_neurons=5)
-        joint_distributions(gf_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0)
+    if 0:
+        #feature_distributions(gf_file, meta_file, min_neurons=5, immuno_id=immuno_id)
+        joint_distributions(gf_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0, immuno_id=immuno_id)
     
     if 0:
         gf_dekock_file = '../resources/public_data/DeKock/gf_150um.csv_standardized.csv'
         coembedding_dekock_seu(gf_file, meta_file, layer_file, gf_dekock_file)
+
+    if 1:
+        clustering(gf_file, meta_file, layer_file)
 
 
