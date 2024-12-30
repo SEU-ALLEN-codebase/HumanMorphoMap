@@ -1,0 +1,10 @@
+*.pkl
+*.png
+*.csv
+*.txt
+*.nii
+*_swc/
+**/merged*/
+**/CNG_version/
+**/one_point_soma*/
+**/.DS_Store
