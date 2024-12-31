@@ -14,14 +14,14 @@ import umap
 from sklearn.decomposition import PCA
 import scipy.cluster.hierarchy as sch
 
-from config import standardize_features, LOCAL_FEATS
+from config import standardize_features, LOCAL_FEATS, REG2LOBE
 
 from spatial import spatial_utils   # pylib
 from ml.feature_processing import clip_outliners
 from plotters.customized_plotters import sns_jointplot
 
 
-def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True, use_local_features=True):
+def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True, use_local_features=True, merge_lr=False):
     # Loading the data
     df = pd.read_csv(gf_file, index_col=0)
     
@@ -35,8 +35,13 @@ def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_n
     meta = pd.read_csv(meta_file, index_col=0)
     col_reg = 'brain_region'
     # 
-    sns.set_theme(style='ticks', font_scale=1)
-    df['region'] = meta[col_reg]
+    #print(np.unique(meta[col_reg])); sys.exit()
+    if merge_lr:
+        #regions = [r.replace('.L', '').replace('.R', '') for r in meta[col_reg]]
+        regions = [REG2LOBE[r] for r in meta[col_reg]]
+        df['region'] = regions
+    else:
+        df['region'] = meta[col_reg]
     df['patient'] = meta['patient_id']
     # filter brain regions with number of neurons smaller than `min_neurons`
     rs, rcnts = np.unique(df.region, return_counts=True)
@@ -213,10 +218,65 @@ def coembedding_dekock_seu(gf_seu_file, meta_seu_file, layer_seu_file, gf_dekock
 
 
 def clustering(gf_file, meta_file, layer_file=None):
+
+    # --------------- Helper functions ---------------- #
+    def get_cluster_distr(df, cluster_id, pregs, layers, players=('L2/3', 'L4', 'L5/6')):
+        cc = id2map.cluster == cluster_id
+        cc_ids = cc.index[cc]
+
+        # region distribution
+        rdict = dict(zip(*np.unique(df.region.loc[cc_ids], return_counts=True)))
+        rdistr = np.zeros(len(pregs))
+        for ir, r in enumerate(pregs):
+            if r in rdict:
+                rdistr[ir] = rdict[r]
+            else:
+                rdistr[ir] = 0
+
+        # layer distribution
+        ldistr = np.zeros(len(players))
+        ldict = dict(zip(*np.unique(layers.loc[cc_ids], return_counts=True)))
+        for il, l in enumerate(players):
+            if l in ldict:
+                ldistr[il] = ldict[l]
+            else:
+                ldistr[il] = 0
+        return cc, cc_ids, rdistr, ldistr
+
+
+    def plot_distributions(clusters, classes, distributions, outfig):
+        proportions = np.array(distributions)
+        proportions /= proportions.sum(axis=1, keepdims=True)
+
+        # Cumulative proportions for stacking
+        cumulative = np.cumsum(proportions, axis=1)
+
+        # Plot
+        fig, ax = plt.subplots(figsize=(8, 6))
+        #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#33ffff']
+        colors = {ie: plt.cm.rainbow(each, bytes=False) for ie, each in enumerate(np.linspace(0, 1, len(classes)))}
+        for i, cls in enumerate(classes):
+            ax.bar(clusters, proportions[:, i], label=cls, color=colors[i],
+                   bottom=(cumulative[:, i - 1] if i > 0 else 0))
+
+        # Formatting
+        ax.set_ylabel('Proportion')
+        ax.set_title('Class proportion across clusters')
+        ax.legend(title='Classes')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(outfig, dpi=300)
+        plt.close()
+        print()
+        
+
+    # ---------- End of helper functions -------------- #
+
+
     sns.set_theme(style='ticks', font_scale=1.5)
 
     # use all features. This is because we have standardized the neurons
-    df = load_features(gf_file, meta_file, min_neurons=0, standardize=True, use_local_features=False)
+    df = load_features(gf_file, meta_file, min_neurons=0, standardize=True, use_local_features=False, merge_lr=True)
     layers = pd.read_csv(layer_file, index_col=0)
 
 
@@ -224,7 +284,7 @@ def clustering(gf_file, meta_file, layer_file=None):
     # clip the data for extreme values, as this is mostly deficiency in reconstruction
     dfc22 = df22.clip(-3, 3)
     # Do clustering
-    clustmap = sns.clustermap(dfc22, cmap='bwr')
+    clustmap = sns.clustermap(dfc22, cmap='RdBu')
     # get the clusters
     row_linkage = clustmap.dendrogram_row.linkage
     row_clusters = sch.fcluster(row_linkage, t=100, criterion='maxclust')
@@ -237,19 +297,38 @@ def clustering(gf_file, meta_file, layer_file=None):
     orig_layer_distr = np.unique(layers, return_counts=True)
     print(f'Layer distribution of all neurons: {orig_layer_distr}')
 
+    # save image to  file
+    plt.savefig('clustermap.png', dpi=300); plt.close()
+
+    # Overall layer distribution
+    region_dict = dict(zip(*np.unique(df.region, return_counts=True)))
+    pregs, pcount = [], 200
+    # keep only non-composite areas
+    rdistr = []
+    for k, v in region_dict.items():
+        if ('(' in k) or ('_' in k) or (v < pcount):
+            continue
+        else:
+            pregs.append(k)
+            rdistr.append(v)
+    rdistr = np.array(rdistr)
+
     # major clusters
-    c65 = id2map.cluster == 65
-    c65_ids = c65.index[c65]
-    print('c65: ', np.unique(layers.loc[c65_ids], return_counts=True))
-    c79 = id2map.cluster == 79
-    c79_ids = c79.index[c79]
-    print('c79: ', np.unique(layers.loc[c79_ids], return_counts=True))
-    c99 = id2map.cluster == 99
-    c99_ids = c99.index[c99]
-     print('c99: ', np.unique(layers.loc[c99_ids], return_counts=True))
-    import ipdb; ipdb.set_trace()
-    print()
+    luniq, ldistr = np.unique(layers, return_counts=True)
+    c65, c65_ids, c65_rdistr, c65_ldistr = get_cluster_distr(df, 65, pregs, layers)
+    c79, c79_ids, c79_rdistr, c79_ldistr = get_cluster_distr(df, 79, pregs, layers)
+    c99, c99_ids, c99_rdistr, c99_ldistr = get_cluster_distr(df, 99, pregs, layers)
+    # check the distribution
     
+
+    clusters = ['All', 'c65', 'c79', 'c99']
+    plot_distributions(clusters, luniq, [ldistr, c65_ldistr, c79_ldistr, c99_ldistr], 'layer_across_clusters.png')
+    plot_distributions(clusters, pregs, [rdistr, c65_rdistr, c79_rdistr, c99_rdistr], 'region_across_clusters.png')
+    
+    print()
+
+       
+
     
 
 
