@@ -241,29 +241,42 @@ def clustering(gf_file, meta_file, layer_file=None):
                 ldistr[il] = ldict[l]
             else:
                 ldistr[il] = 0
-        return cc, cc_ids, rdistr, ldistr
+        # 
+        idistr = np.array([(df.index[cc] > 6208).sum(), (df.index[cc] <= 6208).sum()])
+
+        return cc, cc_ids, rdistr, ldistr, idistr
 
 
     def plot_distributions(clusters, classes, distributions, outfig):
-        proportions = np.array(distributions)
+        proportions = np.array(distributions).astype(float)
         proportions /= proportions.sum(axis=1, keepdims=True)
 
         # Cumulative proportions for stacking
         cumulative = np.cumsum(proportions, axis=1)
 
         # Plot
+        sns.set_theme(style='ticks', font_scale=2.0)
         fig, ax = plt.subplots(figsize=(8, 6))
         #colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#33ffff']
         colors = {ie: plt.cm.rainbow(each, bytes=False) for ie, each in enumerate(np.linspace(0, 1, len(classes)))}
         for i, cls in enumerate(classes):
-            ax.bar(clusters, proportions[:, i], label=cls, color=colors[i],
+            ax.bar(clusters, proportions[:, i], label=cls, color=colors[i], width=0.5,
                    bottom=(cumulative[:, i - 1] if i > 0 else 0))
 
         # Formatting
+        tname = os.path.split(outfig)[-1].split('_')[0].capitalize()
         ax.set_ylabel('Proportion')
-        ax.set_title('Class proportion across clusters')
-        ax.legend(title='Classes')
-        plt.xticks(rotation=45)
+        ax.set_title(f'{tname} proportion across clusters')
+        ax.legend(title=None, ncol=len(classes), alignment='center', frameon=False,
+                  labelspacing=0.1, handletextpad=0.05, borderpad=0.05)
+        ax.set_xlabel('Clusters')
+        ax.spines['left'].set_linewidth(2)
+        ax.spines['right'].set_linewidth(2)
+        ax.spines['top'].set_linewidth(2)
+        ax.spines['bottom'].set_linewidth(2)
+        ax.xaxis.set_tick_params(width=2)
+        ax.yaxis.set_tick_params(width=2)
+        plt.yticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2])
         plt.tight_layout()
         plt.savefig(outfig, dpi=300)
         plt.close()
@@ -273,7 +286,7 @@ def clustering(gf_file, meta_file, layer_file=None):
     # ---------- End of helper functions -------------- #
 
 
-    sns.set_theme(style='ticks', font_scale=1.5)
+    sns.set_theme(style='ticks', font_scale=1.6)
 
     # use all features. This is because we have standardized the neurons
     df = load_features(gf_file, meta_file, min_neurons=0, standardize=True, use_local_features=False, merge_lr=True)
@@ -283,22 +296,68 @@ def clustering(gf_file, meta_file, layer_file=None):
     df22 = df.iloc[:,:22].copy()    # features
     # clip the data for extreme values, as this is mostly deficiency in reconstruction
     dfc22 = df22.clip(-3, 3)
+    # do mRMR feature selection
+    #import pymrmr
+    #rdict = dict(zip(np.unique(df.region), range(len(np.unique(df.region)))))
+    #rindices = [rdict[rname] for rname in df.region]
+    #dfc22.loc[:, 'region'] = rindices
+    #feats = pymrmr.mRMR(dfc22, 'MIQ', 10)
+    #print(feats)
+
     # Do clustering
+    #clustmap = sns.clustermap(dfc22[
+    #        ['Number of Tips', 'Average Fragmentation', 'Max Euclidean Distance', 
+    #         'Total Length', 'N_stem', 'Average Bifurcation Angle Remote']], cmap='RdBu')
     clustmap = sns.clustermap(dfc22, cmap='RdBu')
+    
     # get the clusters
     row_linkage = clustmap.dendrogram_row.linkage
-    row_clusters = sch.fcluster(row_linkage, t=100, criterion='maxclust')
+    row_clusters = sch.fcluster(row_linkage, t=60, criterion='maxclust')
     # the the clustermaping
     id2map = pd.DataFrame(np.transpose([dfc22.index, row_clusters]), columns=('idx', 'cluster')).set_index('idx')
     # index after clsuter map
     reordered_ind = clustmap.dendrogram_row.reordered_ind
+
+    # extract the major clusters
+    min_count = 200
+    cids, ccnts = np.unique(row_clusters, return_counts=True)
+
+    # assign colors
+    salient_cluster_mask = ccnts > min_count
+    salient_cluster_ids = cids[salient_cluster_mask]
+    
+    COLORS = 'rgbcmyk'
+    row_cmap = {ie: COLORS[each]
+                    for ie, each in zip(salient_cluster_ids, range(len(salient_cluster_ids)))}
+    row_colors = []
+    for idx in row_clusters:
+        if idx in row_cmap:
+            row_colors.append(row_cmap[idx])
+        else:
+            row_colors.append('w')
+    
+    plt.close() # close the previous figure
+    clustmap = sns.clustermap(dfc22, cmap='RdBu', row_colors=row_colors, xticklabels=1,
+                              cbar_pos=(0.3,0.05,0.02,0.05),
+                              #cbar_kws=dict(orientation='horizontal')
+                              )
+    plt.setp(clustmap.ax_heatmap.get_xticklabels(), rotation=45, rotation_mode='anchor', ha='right')
+    clustmap.ax_heatmap.set_ylabel('Neuron')
+    clustmap.ax_heatmap.tick_params(left=False, right=False, labelleft=False, labelright=False)
+    clustmap.ax_col_dendrogram.set_visible(False)
+    #configuring the colorbar
+    #clustmap.cax.set_xlabel('Standardized\nfeature', fontsize=12)
+    clustmap.cax.tick_params(direction='in')
+
+    # save image to  file
+    plt.subplots_adjust(left=0.08, right=0.95)
+    plt.savefig('clustermap.png', dpi=300); plt.close()
+
     # dict(zip(*np.unique(row_clusters, return_counts=True)))
     # print original status
     orig_layer_distr = np.unique(layers, return_counts=True)
     print(f'Layer distribution of all neurons: {orig_layer_distr}')
 
-    # save image to  file
-    plt.savefig('clustermap.png', dpi=300); plt.close()
 
     # Overall layer distribution
     region_dict = dict(zip(*np.unique(df.region, return_counts=True)))
@@ -313,17 +372,28 @@ def clustering(gf_file, meta_file, layer_file=None):
             rdistr.append(v)
     rdistr = np.array(rdistr)
 
-    # major clusters
+    # major layers
     luniq, ldistr = np.unique(layers, return_counts=True)
-    c65, c65_ids, c65_rdistr, c65_ldistr = get_cluster_distr(df, 65, pregs, layers)
-    c79, c79_ids, c79_rdistr, c79_ldistr = get_cluster_distr(df, 79, pregs, layers)
-    c99, c99_ids, c99_rdistr, c99_ldistr = get_cluster_distr(df, 99, pregs, layers)
-    # check the distribution
-    
+    idistr = np.array([(df.index > 6208).sum(), (df.index <= 6208).sum()])
 
-    clusters = ['All', 'c65', 'c79', 'c99']
-    plot_distributions(clusters, luniq, [ldistr, c65_ldistr, c79_ldistr, c99_ldistr], 'layer_across_clusters.png')
-    plot_distributions(clusters, pregs, [rdistr, c65_rdistr, c79_rdistr, c99_rdistr], 'region_across_clusters.png')
+    ccs, cc_ids, cc_rdistrs, cc_ldistrs, cc_idistrs = [], [], [rdistr], [ldistr], [idistr]
+    clusters = ['All']
+    icluster = 0
+    for cid in salient_cluster_ids:
+        cc, cc_id, cc_rdistr, cc_ldistr, cc_idistr = get_cluster_distr(df, cid, pregs, layers)
+        clusters.append(f'C{icluster}')
+        ccs.append(cc)
+        cc_ids.append(cc_id)
+        cc_rdistrs.append(cc_rdistr)
+        cc_ldistrs.append(cc_ldistr)
+        cc_idistrs.append(cc_idistr)    # immuno
+
+        icluster += 1
+
+
+    plot_distributions(clusters, luniq, cc_ldistrs, 'layer_across_clusters.png')
+    plot_distributions(clusters, pregs, cc_rdistrs, 'region_across_clusters.png')
+    plot_distributions(clusters, ['w/ IHC', 'w/o IHC'], cc_idistrs, 'ihc_across_clusters.png')
     
     print()
 
