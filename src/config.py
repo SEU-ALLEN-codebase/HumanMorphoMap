@@ -13,6 +13,8 @@ LOCAL_FEATS = [
     'Average Parent-daughter Ratio',
 ]
 
+IMMUNO_ID = 6208
+
 REG2LOBE = {
     '(X)FG': 'FL',
     'BN.L': 'BN',
