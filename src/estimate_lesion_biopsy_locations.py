@@ -149,13 +149,13 @@ def get_neurons_JSP(meta_file_tissue_JSP, meta_file_neuron, recon_file, ihc=1):
         import ipdb; ipdb.set_trace()
         print()
 
-def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1):
+def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1, use_subset=True):
     """
     Compare the neurons from tissues of different diagnoses. tissue_ids in format of [(sample_id, tissue_id), ...]
     """
     
     ############## Helper functions ###################
-    def extract_sub_neurons(tissue_ids, meta, gfs, ihc):
+    def extract_sub_neurons(tissue_ids, meta, gfs, ihc, use_subset):
         nsel = 0
         for pi, ti in tissue_ids:
             pti = (meta.patient_number == pi) & (meta.tissue_block_number == ti)
@@ -163,7 +163,16 @@ def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1):
  
         nsel = nsel & (meta.immunohistochemistry == str(ihc))
         cur_gfs = gfs[gfs.index.isin(meta[nsel].index)]
-        return cur_gfs
+        num_orig = len(cur_gfs)
+        # select neurons with much fibers
+        if use_subset:
+            N = min(max(int(num_orig * 0.2), 10), num_orig)
+            sel_ids = np.argpartition(cur_gfs['Total Length'], num_orig-N)[-N:]
+            sel_gfs = cur_gfs.iloc[sel_ids]
+        
+        print(f'#Neurons before and after filtering: {num_orig}, {N}')
+
+        return sel_gfs
 
     ############ End of helper functions ##############
 
@@ -172,9 +181,8 @@ def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1):
     meta_n = pd.read_csv(meta_file_neuron, index_col=2, low_memory=False)
     gfs = pd.read_csv(gf_file, index_col=0)
     # extract the comparing neuron sets
-    feats_n1 = extract_sub_neurons(tissue_ids1, meta_n, gfs, ihc=ihc)
-    feats_n2 = extract_sub_neurons(tissue_ids2, meta_n, gfs, ihc=ihc)
-    print(f'#Neurons: {len(feats_n1)}, {len(feats_n2)}')
+    feats_n1 = extract_sub_neurons(tissue_ids1, meta_n, gfs, ihc=ihc, use_subset=use_subset)
+    feats_n2 = extract_sub_neurons(tissue_ids2, meta_n, gfs, ihc=ihc, use_subset=use_subset)
 
     # visualize the differences
     sns.set_theme(style='ticks', font_scale=1.8)
@@ -209,11 +217,11 @@ if __name__ == '__main__':
     
     if 0:
         #get_neurons(indir, meta_file_tissue, meta_file_neuron, recon_file=gf_file, ihc=ihc)
-        get_neurons_JSP(meta_file_tissue_JSP, meta_file_neuron, recon_file=gf_file, ihc=ihc)
+        get_neurons_JSP(meta_file_tissue_JSP, meta_file_neuron, recon_file=gf_file, ihc=0)
 
     if 1:
-        #tissue_ids1, tissue_ids2 = [('P00065', 'T001')], [('P00066', 'T001')]
-        tissue_ids1, tissue_ids2 = [('P00057', 'T001'), ('P00070', 'T001')], [('P00062', 'T001'), ('P00064', 'T001')]
+        tissue_ids1, tissue_ids2 = [('P00065', 'T001')], [('P00066', 'T001')]
+        #tissue_ids1, tissue_ids2 = [('P00057', 'T001'), ('P00070', 'T001')], [('P00062', 'T001'), ('P00064', 'T001')]
         compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=ihc)
 
 
