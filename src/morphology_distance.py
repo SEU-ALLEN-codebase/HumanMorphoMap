@@ -86,30 +86,47 @@ def get_v3draw_size(rawfile):
         
     return width, height, depth, channel
 
-def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
+def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
     # helper function
-    def _plot(dff, num=50):
+    def _plot(dff, num=50, zoom=False, figname='temp'):
         sns.set_theme(style='ticks', font_scale=1.7)
         df = dff.copy()
-        sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=2)
+        sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, alpha=0.75)
         # plot the median evoluation
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=range(0, 5001, num), right=False)
-        median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
-        median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: x.left)
+        median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
+        median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
         sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
 
-        plt.xlim(0, 1500); plt.ylim(2, 8)
+        if zoom:
+            plt.xlim(0, 2000); plt.ylim(2, 8)
+        
         plt.subplots_adjust(bottom=0.15, left=0.15)
-        plt.savefig('temp.png', dpi=300); plt.close()
+        plt.savefig(f'{figname}.png', dpi=300); plt.close()
     
 
 
-    relation_file = 'euc_feat_distances.csv'
+    cell_type = 'pyramidal'
+    if cell_type == 'pyramidal':
+        prefix = 'pyramidal_nannot2_ihc0'
+    elif cell_type == 'nonpyramidal':
+        prefix = 'nonpyramidal_nannot2_ihc0'
+    elif cell_type == None:
+        prefix = 'ihc0'
+
+    relation_file = f'euc_feat_distances_{prefix}.csv'
+    CELL_DICT = {
+        'pyramidal': 0,
+        'nonpyramidal': 1
+    }
+    
 
     if os.path.exists(relation_file):
         df = pd.read_csv(relation_file)
-        _plot(df)
+        prefix = ''
+        _plot(df, num=100, zoom=True, figname=f'{relation_file[:-4]}_zoom')
+        _plot(df, num=100, zoom=False, figname=f'{relation_file[:-4]}')
         sys.exit()
 
 
@@ -128,6 +145,15 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
     use_only_noncrop = True
     if use_only_noncrop:    # single cell images!
         meta_n1 = meta_n1[meta_n1['image_cell_id'] == '-']
+
+    if cell_type is not None:
+        # extract only pyramdial cells
+        ctypes = pd.read_csv(cell_type_file, index_col=0)
+        # pyramidal cells
+        ctypes_pyramidal = ctypes[(ctypes.CLS2 == CELL_DICT[cell_type]) & (ctypes.num_annotator > 1)]
+        id_ctypes = ctypes_pyramidal.index.to_series().apply(lambda x: int(x.split('_')[0]))
+        meta_n1 = meta_n1[meta_n1.index.isin(id_ctypes)]
+    
 
     gfs = gfs.loc[meta_n1.index]
     gfs_n1 = standardize_features(gfs, gfs.columns, inplace=False)
@@ -288,9 +314,10 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
                     fdists_all.extend(fdists.tolist())
                     
     df = pd.DataFrame(np.vstack((dists_all, fdists_all)).transpose(), columns=('euclidean_distance', 'feature_distance'))
-    print(f'Total pairs: {df.shape[0]}')
-    _plot(df)
     df.to_csv(relation_file)
+    print(f'Total pairs: {df.shape[0]}')
+    _plot(df, num=100, zoom=True, figname=f'{relation_file[:-4]}_zoom')
+    _plot(df, num=100, zoom=False, figname=f'{relation_file[:-4]}')
 
 
 if __name__ == '__main__':
@@ -304,8 +331,8 @@ if __name__ == '__main__':
 
     if 1: 
         image_dir = '/human402/Human_Single_Imaging_Raw_Data/Manual_cell_data/After_20220715'
-        find_coordinates(image_dir, meta_file_neuron, gf_file, ihc=0)
+        cell_type_file = '../meta/cell_type_annot_rating_cls2_yufeng_unique.csv'
+        find_coordinates(image_dir, meta_file_neuron, gf_file, cell_type_file, ihc=0)
     
     
-
 
