@@ -97,9 +97,10 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=range(0, 5001, num), right=False)
         median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: x.left)
-        sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o')
+        sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
 
         plt.xlim(0, 1500); plt.ylim(2, 8)
+        plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig('temp.png', dpi=300); plt.close()
     
 
@@ -117,7 +118,9 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
     gfs = pd.read_csv(gf_file, index_col=0)
     # extract the target neurons
     meta_n1 = meta_n.loc[gfs.index]
-    meta_n1.loc[:,'immunohistochemistry'] = meta_n1.loc[:,'immunohistochemistry'].astype(int)
+    meta_n1.loc[:, 'immunohistochemistry'] = pd.to_numeric(
+            meta_n1.loc[:, 'immunohistochemistry'], errors='coerce').fillna(0).astype(int)
+
 
     if ihc != 2:
         meta_n1 = meta_n1[meta_n1['immunohistochemistry'] == ihc]
@@ -128,6 +131,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
 
     gfs = gfs.loc[meta_n1.index]
     gfs_n1 = standardize_features(gfs, gfs.columns, inplace=False)
+    # use a subset of features
+    #gfs_n1 = gfs_n1[['N_stem', 'Average Contraction', 'Average Fragmentation', 'Average Parent-daughter Ratio', 'Average Bifurcation Angle Remote', 'Hausdorff Dimension']]
 
     dists_all = []
     fdists_all = []
@@ -261,7 +266,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, ihc=None):
                         except ValueError:
                             continue
 
-                        dx, dy, dz = width/2 - sx, height/ - sy, depth/2 - sz
+                        dx, dy, dz = width/2 - sx, height/2 - sy, depth/2 - sz
                         xi = image_xyz_um[0] - dx*float(i_meta.xy_resolution)/1000.
                         yi = image_xyz_um[1] - dy*float(i_meta.xy_resolution)/1000.
                         zi = image_xyz_um[2] - dz*float(i_meta.z_resolution)/1000.
