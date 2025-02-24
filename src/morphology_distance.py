@@ -92,6 +92,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     def _plot(dff, num=50, zoom=False, figname='temp'):
         sns.set_theme(style='ticks', font_scale=1.7)
         df = dff.copy()
+        df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
         sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, alpha=0.75)
         # plot the median evoluation
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=range(0, 5001, num), right=False)
@@ -101,7 +102,9 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
         if zoom:
             plt.xlim(0, 2000); plt.ylim(2, 8)
-        
+     
+        plt.xlabel('Euclidean distance (mm)')   
+        plt.ylabel('Feature distance')
         plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
     
