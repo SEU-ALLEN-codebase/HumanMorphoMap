@@ -95,13 +95,16 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
         sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, alpha=0.75)
         # plot the median evoluation
-        df['A_bin'] = pd.cut(df['euclidean_distance'], bins=range(0, 5001, num), right=False)
+        df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
         median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
+        median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
+        # remove low-count bins, to avoid randomness
+        median_data = median_data[median_data['count'] > 10]
         sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
 
         if zoom:
-            plt.xlim(0, 2000); plt.ylim(2, 8)
+            plt.xlim(0, 2.); plt.ylim(2, 8)
      
         plt.xlabel('Euclidean distance (mm)')   
         plt.ylabel('Feature distance')
@@ -110,13 +113,13 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'pyramidal'
+    cell_type = 'nonpyramidal'
     if cell_type == 'pyramidal':
-        prefix = 'pyramidal_nannot2_ihc0'
+        prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
-        prefix = 'nonpyramidal_nannot2_ihc0'
+        prefix = f'nonpyramidal_nannot2_ihc{ihc}'
     elif cell_type == None:
-        prefix = 'ihc0'
+        prefix = f'ihc{ihc}'
 
     relation_file = f'euc_feat_distances_{prefix}.csv'
     CELL_DICT = {
@@ -128,8 +131,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     if os.path.exists(relation_file):
         df = pd.read_csv(relation_file)
         prefix = ''
-        _plot(df, num=100, zoom=True, figname=f'{relation_file[:-4]}_zoom')
-        _plot(df, num=100, zoom=False, figname=f'{relation_file[:-4]}')
+        #_plot(df, num=30, zoom=True, figname=f'{relation_file[:-4]}_zoom')
+        _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}')
         sys.exit()
 
 
@@ -280,6 +283,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
                             for rfile in [raw_file1, raw_file2, raw_file3]:
                                 if os.path.exists(rfile):
                                     raw_file = rfile
+                                    break
                             if raw_file is None:
                                 print(f'   --> Not found: {i_image}')
                                 continue
@@ -319,8 +323,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     df = pd.DataFrame(np.vstack((dists_all, fdists_all)).transpose(), columns=('euclidean_distance', 'feature_distance'))
     df.to_csv(relation_file)
     print(f'Total pairs: {df.shape[0]}')
-    _plot(df, num=100, zoom=True, figname=f'{relation_file[:-4]}_zoom')
-    _plot(df, num=100, zoom=False, figname=f'{relation_file[:-4]}')
+    #_plot(df, num=30, zoom=True, figname=f'{relation_file[:-4]}_zoom')
+    _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}')
 
 
 if __name__ == '__main__':

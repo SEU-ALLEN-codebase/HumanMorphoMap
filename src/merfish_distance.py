@@ -91,6 +91,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file):
     xy = df_f.loc[df_pca.index, ['adjusted.x', 'adjusted.y']]
     # estimate the relationship for pyramidal cells and non-pyramidal cells
     ctypes = df_f.loc[df_pca.index, 'cluster_L1'].apply(lambda x: 'EXC' if x=='EXC' else 'INH')
+    #ctypes = df_f.loc[df_pca.index, 'cluster_L1']
     
     sns.set_theme(style='ticks', font_scale=1.7)
     for ctype in np.unique(ctypes):
@@ -113,9 +114,11 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file):
 
 
 if __name__ == '__main__':
-    merfish_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.matrix.csv'
-    gene_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.genes.csv'
-    feat_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.features.csv'
-    
+    #merfish_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.matrix.csv'
+    #gene_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.genes.csv'
+    #feat_file = '../resources/human_merfish/H19/H19.30.001.STG.250.expand.rep1.features.csv'
+    merfish_file = '../resources/human_merfish/H18/H18.06.006.MTG.250.expand.rep1.matrix.csv'
+    gene_file = '../resources/human_merfish/H18/H18.06.006.MTG.250.expand.rep1.genes.csv'
+    feat_file = '../resources/human_merfish/H18/H18.06.006.MTG.250.expand.rep1.features.csv'
     merfish_vs_distance(merfish_file, gene_file, feat_file)
 
