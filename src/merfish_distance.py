@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
 from scipy.spatial.distance import pdist
-
+from scipy.stats import spearmanr, pearsonr, linregress
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -41,7 +41,7 @@ def process_merfish(cgm):
     gvmask = gvar >= gvthr
     filtered = filtered.loc[:, filtered.columns[gvmask]]
     # Get the top-k components
-    pca = PCA(50)
+    pca = PCA(50, random_state=1024)
     fpca = pca.fit_transform(filtered)
     print(f'Remained variance ratio after PCA: {pca.explained_variance_ratio_.sum():.3f}')
     
@@ -53,16 +53,24 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file):
     # helper functions
     def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000):
         df = dff.copy()
-        random.seed(1024)
         if df.shape[0] > nsample:
             df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
         else:
             df_sample = df
-        sns.scatterplot(df_sample, x='euclidean_distance', y='feature_distance', s=5, alpha=0.75)
+        sns.scatterplot(df_sample, x='euclidean_distance', y='feature_distance', s=2, alpha=0.75, color='gray')
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
         median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
+        median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
+        median_data = median_data[~median_data.feature_distance.isna()]
+        median_data = median_data[median_data['count'] > 30]
+
         sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+        p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
+        p_pearson = pearsonr(median_data['A_bin_start'], median_data['feature_distance'])
+        print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
+        slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
+        print(f'Slope: {slope:.4f}')
 
         if zoom:
             plt.xlim(0, 2.); plt.ylim(2, 8)
@@ -78,6 +86,9 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file):
 
     df_g = pd.read_csv(gene_file)
     df_f = pd.read_csv(feat_file)
+    
+    random.seed(1024)
+    np.random.seed(1024)
 
     # initialize the cell-by-gene matrix
     # For larger matrix, use sparse matrix

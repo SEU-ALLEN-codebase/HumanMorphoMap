@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import xml.etree.ElementTree as ET
 from scipy.spatial.distance import pdist
+from scipy.stats import spearmanr, pearsonr, linregress
 
 os.environ["TIFFWARNINGS"] = "0"
 import SimpleITK as sitk
@@ -93,18 +94,23 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         sns.set_theme(style='ticks', font_scale=1.7)
         df = dff.copy()
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
-        sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, alpha=0.75)
+        sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, alpha=0.3, edgecolor='none', rasterized=True, color='black')
         # plot the median evoluation
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
         median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
         median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
         # remove low-count bins, to avoid randomness
-        median_data = median_data[median_data['count'] > 10]
+        median_data = median_data[median_data['count'] > 18]
         sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+        p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
+        p_pearson = pearsonr(median_data['A_bin_start'], median_data['feature_distance'])
+        print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
+        # get the slope
+        slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
+        print(f'Slope: {slope:.4f}')
 
-        if zoom:
-            plt.xlim(0, 2.); plt.ylim(2, 8)
+        plt.xlim(0, 5.); plt.ylim(2, 12)
      
         plt.xlabel('Euclidean distance (mm)')   
         plt.ylabel('Feature distance')
@@ -113,7 +119,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'nonpyramidal'
+    cell_type = 'pyramidal'
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
