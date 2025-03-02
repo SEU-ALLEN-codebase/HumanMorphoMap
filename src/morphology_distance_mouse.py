@@ -60,7 +60,7 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
     print(f'Slope: {slope:.4f}')
 
-    plt.xlim(0, max_dist); #plt.ylim(2, 8)
+    plt.xlim(0, max_dist); plt.ylim(2, 10)
 
     plt.xlabel('Euclidean distance (mm)')
     plt.ylabel('Feature distance')
@@ -99,7 +99,7 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp')
 
 
 if __name__ == '__main__':
-    ntype = 'basal'
+    ntype = 'dendrite'
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
     spos_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1891_soma_pos.csv'
     sreg_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1876_soma_region.csv'

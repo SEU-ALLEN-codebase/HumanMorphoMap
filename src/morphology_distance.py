@@ -100,6 +100,9 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
         median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
+        # save for subsequent analysis
+        median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+        
         # remove low-count bins, to avoid randomness
         median_data = median_data[median_data['count'] > 18]
         sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
@@ -119,7 +122,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'pyramidal'
+    cell_type = 'nonpyramidal'
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
