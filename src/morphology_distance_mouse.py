@@ -22,7 +22,10 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
         df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
     else:
         df_sample = df
-    
+ 
+    plt.figure(figsize=(8,8))
+
+    '''   
     ax_scatter = sns.scatterplot(
         df_sample, 
         x='euclidean_distance', 
@@ -34,18 +37,6 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
         rasterized=True
     )
     '''
-    sns.kdeplot(
-        x='euclidean_distance', 
-        y='feature_distance',
-        data=df,
-        cmap='viridis', 
-        levels=5,     # 增加等高线层级
-        ax=ax_scatter,
-        color='red',
-        linewdith=1,
-    )
-    '''
-
 
     df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, max_dist+0.001, num), right=False)
     median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
@@ -54,21 +45,31 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     # remove low-count bins, to avoid randomness
     median_data = median_data[median_data['count'] > 30]
 
-    sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+    #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+    g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
+                    scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3},
+                    lowess=True)
+
     p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
     print(f'Spearman coefficient: {p_spearman.statistic:.3f}')
     slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
-    print(f'Slope: {slope:.4f}')
+    print(f'Slope and R_pearson: {slope:.3f}, {r_value:.3f}')
 
-    plt.xlim(0, max_dist); plt.ylim(2, 10)
+    plt.xlim(0, max_dist)#; plt.ylim(2, 10)
 
-    plt.xlabel('Euclidean distance (mm)')
-    plt.ylabel('Feature distance')
+    plt.xlabel('Soma-soma distance (mm)')
+    plt.ylabel('Morphological distance')
+    ax = plt.gca()
+    ax.spines['left'].set_linewidth(2)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['right'].set_linewidth(2)
+    ax.spines['top'].set_linewidth(2)
     plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
     print()
 
-def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp'):
+def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp', subset=False):
     cregs = ('ACAd', 'ACAv', 'AId', 'AIp', 'AIv',
        'AUDd', 'AUDp', 'AUDpo', 'AUDv', 'ECT', 
        'FRP', 'MOp', 'MOs', 'ORBl', 'ORBm', 'ORBvl', 
@@ -85,11 +86,17 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp')
     isoc = df[sreg.loc[df.index].isin(cregs).values[:,0]]
     # normalize the features
     standardize_features(isoc, isoc.columns, inplace=True)
+    
+    if subset:
+        # use subset of features
+        isoc = isoc[['Stems', 'AverageContraction', 'AverageFragmentation', 
+                    'AverageParent-daughterRatio', 'AverageBifurcationAngleRemote', 
+                    'AverageBifurcationAngleLocal']]
     # distance
-    edists = pdist(isoc)
+    fdists = pdist(isoc)
     # 
     tmp_spos = spos.loc[isoc.index] / 1000. # to mm
-    fdists = pdist(tmp_spos)
+    edists = pdist(tmp_spos)
 
     dff = pd.DataFrame(np.array([edists, fdists]).transpose(), columns=('euclidean_distance', 'feature_distance'))
     sns.set_theme(style='ticks', font_scale=1.7)
@@ -99,9 +106,9 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp')
 
 
 if __name__ == '__main__':
-    ntype = 'dendrite'
+    ntype = 'final'
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
     spos_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1891_soma_pos.csv'
     sreg_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1876_soma_region.csv'
-    estimate_cortical_relations(feat_file, spos_file, sreg_file, figname=f'euc_feat_mouse_{ntype}')
+    estimate_cortical_relations(feat_file, spos_file, sreg_file, figname=f'euc_feat_mouse_{ntype}', subset=False)
 

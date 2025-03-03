@@ -57,7 +57,9 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
             df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
         else:
             df_sample = df
-        sns.scatterplot(df_sample, x='euclidean_distance', y='feature_distance', s=2, alpha=0.75, color='gray')
+        
+        plt.figure(figsize=(8,8))
+        #sns.scatterplot(df_sample, x='euclidean_distance', y='feature_distance', s=2, alpha=0.75, color='gray')
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
         median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
@@ -67,7 +69,12 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         median_data = median_data[~median_data.feature_distance.isna()]
         median_data = median_data[median_data['count'] > 30]
 
-        sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+        #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
+        g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
+                    scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3},
+                    lowess=True)
+
         p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
         p_pearson = pearsonr(median_data['A_bin_start'], median_data['feature_distance'])
         print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
@@ -76,8 +83,8 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
 
         plt.xlim(0, 5.); plt.ylim(2, 15)
 
-        plt.xlabel('Euclidean distance (mm)')
-        plt.ylabel('Feature distance')
+        plt.xlabel('Soma-soma distance (mm)')
+        plt.ylabel('Transcriptomic distance')
         plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
         print()
