@@ -24,6 +24,10 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
         df_sample = df
  
     plt.figure(figsize=(8,8))
+    #g = sns.regplot(x='euclidean_distance', y='feature_distance', data=df_sample,
+    #                scatter_kws={'s':4, 'alpha':0.5, 'color':'black'},
+    #                line_kws={'color':'red', 'alpha':0.75, 'linewidth':3},
+    #                lowess=True)
 
     '''   
     ax_scatter = sns.scatterplot(
@@ -48,15 +52,19 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
     g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
                     scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3},
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5},
                     lowess=True)
 
     p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
     print(f'Spearman coefficient: {p_spearman.statistic:.3f}')
     slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
-    print(f'Slope and R_pearson: {slope:.3f}, {r_value:.3f}')
+    print(f'Slope, R_pearson, and p-value: {slope:.3f}, {r_value:.3f}, {p_value}')
+    
 
-    plt.xlim(0, max_dist)#; plt.ylim(2, 10)
+    plt.xlim(0, max_dist)#; plt.ylim(4,6)
+    delta = 2.5
+    ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+    plt.ylim(ym-delta/2, ym+delta/2)
 
     plt.xlabel('Soma-soma distance (mm)')
     plt.ylabel('Morphological distance')
@@ -65,6 +73,7 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     ax.spines['bottom'].set_linewidth(2)
     ax.spines['right'].set_linewidth(2)
     ax.spines['top'].set_linewidth(2)
+    ax.tick_params(width=2)
     plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
     print()
@@ -99,14 +108,14 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp',
     edists = pdist(tmp_spos)
 
     dff = pd.DataFrame(np.array([edists, fdists]).transpose(), columns=('euclidean_distance', 'feature_distance'))
-    sns.set_theme(style='ticks', font_scale=1.7)
+    sns.set_theme(style='ticks', font_scale=2.2)
     _plot(dff, num=50, figname=figname)
     
     
 
 
 if __name__ == '__main__':
-    ntype = 'final'
+    ntype = 'dendrite'
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
     spos_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1891_soma_pos.csv'
     sreg_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1876_soma_region.csv'

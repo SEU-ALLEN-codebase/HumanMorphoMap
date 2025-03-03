@@ -91,10 +91,15 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
     # helper function
     def _plot(dff, num=50, zoom=False, figname='temp'):
-        sns.set_theme(style='ticks', font_scale=1.7)
+        sns.set_theme(style='ticks', font_scale=2.2)
         plt.figure(figsize=(8,8))
         df = dff.copy()
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
+        #g = sns.regplot(df, x='euclidean_distance', y='feature_distance', 
+        #                scatter_kws={'s':4, 'alpha':0.5, 'color':'black'},
+        #                line_kws={'color':'red', 'alpha':0.75, 'linewidth':3}, lowess=True)
+
+        
         #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
         #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
         # plot the median evoluation
@@ -106,12 +111,12 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
         
         # remove low-count bins, to avoid randomness
-        median_data = median_data[median_data['count'] > 18]
+        median_data = median_data[median_data['count'] > 30]
 
         #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
         g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
                     scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3}, lowess=True)
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5})#, lowess=True)
 
 
         p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
@@ -119,10 +124,13 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
         # get the slope
         slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
-        print(f'Slope: {slope:.4f}')
+        print(f'Slope: {slope:.4f}, p_value: {p_value}')
+        
 
         plt.xlim(0, 5.)
-        #plt.ylim(2, 12)
+        delta = 2.5
+        ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+        plt.ylim(ym-delta/2, ym+delta/2)
      
         plt.xlabel('Soma-soma distance (mm)')   
         plt.ylabel('Morphological distance')
@@ -131,12 +139,13 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         ax.spines['bottom'].set_linewidth(2)
         ax.spines['right'].set_linewidth(2)
         ax.spines['top'].set_linewidth(2)
+        ax.tick_params(width=2)#, length=6)
         plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
     
 
 
-    cell_type = 'pyramidal'
+    cell_type = 'nonpyramidal'
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':

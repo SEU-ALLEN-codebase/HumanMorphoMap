@@ -72,7 +72,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
         g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
                     scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3},
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5},
                     lowess=True)
 
         p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
@@ -81,10 +81,19 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
         print(f'Slope: {slope:.4f}')
 
-        plt.xlim(0, 5.); plt.ylim(2, 15)
+        plt.xlim(0, 5.)
+        delta = 2.5
+        ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+        plt.ylim(ym-delta/2, ym+delta/2)
 
         plt.xlabel('Soma-soma distance (mm)')
         plt.ylabel('Transcriptomic distance')
+        ax = plt.gca()
+        ax.spines['left'].set_linewidth(2)
+        ax.spines['bottom'].set_linewidth(2)
+        ax.spines['right'].set_linewidth(2)
+        ax.spines['top'].set_linewidth(2)
+        ax.tick_params(width=2)
         plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
         print()
@@ -112,7 +121,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
     ctypes = df_f.loc[df_pca.index, 'cluster_L1'].apply(lambda x: 'EXC' if x=='EXC' else 'INH')
     #ctypes = df_f.loc[df_pca.index, 'cluster_L1']
     
-    sns.set_theme(style='ticks', font_scale=1.7)
+    sns.set_theme(style='ticks', font_scale=2.2)
     for ctype in np.unique(ctypes):
         print(ctype)
         ct_mask = ctypes == ctype

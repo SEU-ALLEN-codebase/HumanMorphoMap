@@ -24,7 +24,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     df['smoothed_y'] = ndimage.convolve1d(df['feature_distance_y'], np.ones(3)/3., mode='reflect')
     
     # plotting
-    sns.set_theme(style='ticks', font_scale=1.9)
+    sns.set_theme(style='ticks', font_scale=2.2)
     fig = plt.figure(figsize=(8,8))
     #g1 = sns.lineplot(x='feature_distance_x', y='smoothed_y', data=df, color='r', linewidth=3, alpha=0.5)
     #g2 = sns.scatterplot(x='feature_distance_x', y='smoothed_y', data=df, marker='o', color='black', s=100, alpha=0.75)
@@ -35,20 +35,21 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
         ycol = 'feature_distance_y'
     g = sns.regplot(x='feature_distance_x', y=ycol, data=df, 
                     scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':3})
+                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5})
 
     slope, intercept, r_value, p_value, std_err = linregress(df['feature_distance_x'], df[ycol])
     print(f'{slope:.3f}, {intercept:.3f}, {r_value:.3f}, {p_value:.3g}, {std_err:.3f}')
     #p_pearson = pearsonr(df['feature_distance_x'], df['smoothed_y'])
     #print(f'Pearson CC: {p_pearson.statistic:.3f}')
     
-    plt.xlabel('Distance in standardized MERFISH space')
-    plt.ylabel('Distance in standardized morphology space')
+    plt.xlabel('Transcriptomic distance')
+    plt.ylabel('Morphological distance')
     ax = plt.gca()
     ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_linewidth(2)
     ax.spines['right'].set_linewidth(2)
     ax.spines['top'].set_linewidth(2)
+    ax.tick_params(width=2)
     plt.savefig(f'morphology_vs_merfish_{cell_type}.png', dpi=300)
     plt.close()
     
@@ -56,13 +57,13 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     print()
 
 if __name__ == '__main__':
-    cell_type = 'inh'
-    if cell_type == 'exc':
-        merfile = 'EXC_merfish_MTG_mean.csv'
-        morfile = 'euc_feat_distances_pyramidal_nannot2_ihc0_mean.csv'
-    elif cell_type == 'inh':
-        merfile = 'INH_merfish_MTG_mean.csv'
-        morfile = 'euc_feat_distances_nonpyramidal_nannot2_ihc0_mean.csv'
-    cross_modality(merfile, morfile, cell_type=cell_type)
+    for cell_type in ['exc', 'inh']:
+        if cell_type == 'exc':
+            merfile = 'EXC_merfish_MTG_mean.csv'
+            morfile = 'euc_feat_distances_pyramidal_nannot2_ihc0_mean.csv'
+        elif cell_type == 'inh':
+            merfile = 'INH_merfish_MTG_mean.csv'
+            morfile = 'euc_feat_distances_nonpyramidal_nannot2_ihc0_mean.csv'
+        cross_modality(merfile, morfile, cell_type=cell_type)
 
 
