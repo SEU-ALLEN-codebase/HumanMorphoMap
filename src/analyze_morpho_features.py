@@ -21,9 +21,9 @@ from ml.feature_processing import clip_outliners
 from plotters.customized_plotters import sns_jointplot
 
 
-def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_na=True, use_local_features=True, merge_lr=False):
+def load_features(gf_crop_file, meta_file, min_neurons=5, standardize=False, remove_na=True, use_local_features=True, merge_lr=False):
     # Loading the data
-    df = pd.read_csv(gf_file, index_col=0)
+    df = pd.read_csv(gf_crop_file, index_col=0)
     
     if use_local_features:
         fnames = LOCAL_FEATS
@@ -58,8 +58,8 @@ def load_features(gf_file, meta_file, min_neurons=5, standardize=False, remove_n
     return dff
 
 
-def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5, immuno_id=None):
-    df = load_features(gf_file, meta_file, min_neurons=min_neurons)
+def feature_distributions(gf_crop_file, meta_file, boxplot=True, min_neurons=5, immuno_id=None):
+    df = load_features(gf_crop_file, meta_file, min_neurons=min_neurons)
     sregions = sorted(np.unique(df.region))
     ly_mask = df.index <= immuno_id+1
     for stain in ['ly', 'immuno', 'all']:
@@ -93,10 +93,10 @@ def feature_distributions(gf_file, meta_file, boxplot=True, min_neurons=5, immun
             plt.close()
 
 
-def joint_distributions(gf_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP', immuno_id=None):
+def joint_distributions(gf_crop_file, meta_file, layer_file=None, min_neurons=5, feature_reducer='UMAP', immuno_id=None):
     sns.set_theme(style='ticks', font_scale=1.5)
 
-    df = load_features(gf_file, meta_file, min_neurons=min_neurons, standardize=True)
+    df = load_features(gf_crop_file, meta_file, min_neurons=min_neurons, standardize=True)
 
     cache_file = f'cache_{feature_reducer.lower()}.pkl'
     # map to the UMAP space
@@ -217,7 +217,7 @@ def coembedding_dekock_seu(gf_seu_file, meta_seu_file, layer_seu_file, gf_dekock
     sns_jointplot(df_seu, key1, key2, xlim, ylim, 'layer', out_fig, markersize=5)
 
 
-def clustering(gf_file, meta_file, layer_file=None):
+def clustering(gf_crop_file, meta_file, layer_file=None):
 
     # --------------- Helper functions ---------------- #
     def get_cluster_distr(df, cluster_id, pregs, layers, players=('L2/3', 'L4', 'L5/6')):
@@ -289,7 +289,7 @@ def clustering(gf_file, meta_file, layer_file=None):
     sns.set_theme(style='ticks', font_scale=1.6)
 
     # use all features. This is because we have standardized the neurons
-    df = load_features(gf_file, meta_file, min_neurons=0, standardize=True, use_local_features=False, merge_lr=True)
+    df = load_features(gf_crop_file, meta_file, min_neurons=0, standardize=True, use_local_features=False, merge_lr=True)
     layers = pd.read_csv(layer_file, index_col=0)
 
 
@@ -404,8 +404,9 @@ def clustering(gf_file, meta_file, layer_file=None):
 
 if __name__ == '__main__':
 
-    gf_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
-    meta_file = '/data/kfchen/trace_ws/paper_trace_result/csv_copy/final_neuron_info.csv'
+    gf_crop_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
+    gf_no_crop_file = '/data/kfchen/trace_ws/paper_trace_result/nnunet/proposed_9k/8_estimated_radius_swc_l_measure.csv'
+    meta_file = '/data/kfchen/trace_ws/paper_trace_result/csv_copy/Human_SingleCell_TrackingTable_20240712.csv'
     layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
     immuno_id = 6208
     if 0:   # temporary
@@ -415,14 +416,14 @@ if __name__ == '__main__':
         calc_global_features_from_folder(swc_dir, outfile)
 
     if 0:
-        #feature_distributions(gf_file, meta_file, min_neurons=5, immuno_id=immuno_id)
-        joint_distributions(gf_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0, immuno_id=immuno_id)
+        #feature_distributions(gf_crop_file, meta_file, min_neurons=5, immuno_id=immuno_id)
+        joint_distributions(gf_crop_file, meta_file, layer_file, feature_reducer='UMAP', min_neurons=0, immuno_id=immuno_id)
     
     if 0:
         gf_dekock_file = '../resources/public_data/DeKock/gf_150um.csv_standardized.csv'
-        coembedding_dekock_seu(gf_file, meta_file, layer_file, gf_dekock_file)
+        coembedding_dekock_seu(gf_crop_file, meta_file, layer_file, gf_dekock_file)
 
     if 1:
-        clustering(gf_file, meta_file, layer_file)
+        clustering(gf_no_crop_file, meta_file, layer_file)
 
 

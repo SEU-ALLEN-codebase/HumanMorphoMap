@@ -90,47 +90,52 @@ def get_v3draw_size(rawfile):
 def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
     # helper function
-    def _plot(dff, num=50, zoom=False, figname='temp'):
-        sns.set_theme(style='ticks', font_scale=2.2)
-        plt.figure(figsize=(8,8))
+    def _plot(dff, num=50, zoom=False, figname='temp', overall_distribution=False):
         df = dff.copy()
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
-        #g = sns.regplot(df, x='euclidean_distance', y='feature_distance', 
-        #                scatter_kws={'s':4, 'alpha':0.5, 'color':'black'},
-        #                line_kws={'color':'red', 'alpha':0.75, 'linewidth':3}, lowess=True)
-
         
-        #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
-        #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
-        # plot the median evoluation
-        df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
-        median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
-        median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
-        median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
-        # save for subsequent analysis
-        median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+        if overall_distribution:
+            sns.set_theme(style='ticks', font_scale=1.6)
+            plt.figure(figsize=(8,8))
+            sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
+                            alpha=0.3, edgecolor='none', rasterized=True, color='black')
+            sns.displot(df, x='euclidean_distance', y='feature_distance', cmap='pink_r')
+            figname = figname + '_overall'
+
+            plt.xlim(0, 5)
+            
+        else:
+            sns.set_theme(style='ticks', font_scale=2.2)
+            plt.figure(figsize=(8,8))
+            # plot the median evoluation
+            df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
+            median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
+            median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
+            median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
+            # save for subsequent analysis
+            median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+            
+            # remove low-count bins, to avoid randomness
+            median_data = median_data[median_data['count'] > 30]
+
+            g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
+                        scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
+                        line_kws={'color':'red', 'alpha':0.5, 'linewidth':5})#, lowess=True)
+
+
+            p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
+            p_pearson = pearsonr(median_data['A_bin_start'], median_data['feature_distance'])
+            print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
+            # get the slope
+            slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
+            print(f'Slope: {slope:.4f}, p_value: {p_value}')
+            
+
+            plt.xlim(0, 5.)
+            delta = 2.5
+            ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+            plt.ylim(ym-delta/2, ym+delta/2)
         
-        # remove low-count bins, to avoid randomness
-        median_data = median_data[median_data['count'] > 30]
-
-        #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
-        g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
-                    scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5})#, lowess=True)
-
-
-        p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
-        p_pearson = pearsonr(median_data['A_bin_start'], median_data['feature_distance'])
-        print(f'Spearman and pearson: {p_spearman.statistic:.3f}, {p_pearson.statistic:.3f}')
-        # get the slope
-        slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
-        print(f'Slope: {slope:.4f}, p_value: {p_value}')
-        
-
-        plt.xlim(0, 5.)
-        delta = 2.5
-        ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
-        plt.ylim(ym-delta/2, ym+delta/2)
      
         plt.xlabel('Soma-soma distance (mm)')   
         plt.ylabel('Morphological distance')
@@ -146,6 +151,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
 
     cell_type = 'nonpyramidal'
+    overall_distribution = True
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
@@ -163,7 +169,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     if os.path.exists(relation_file):
         df = pd.read_csv(relation_file)
         prefix = ''
-        _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}')
+        _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}', overall_distribution=overall_distribution)
         sys.exit()
 
 

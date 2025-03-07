@@ -50,6 +50,13 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     ax.spines['right'].set_linewidth(2)
     ax.spines['top'].set_linewidth(2)
     ax.tick_params(width=2)
+    # set the x&y range
+    delta = 2.5
+    xm = (df['feature_distance_x'].min() + df['feature_distance_x'].max()) / 2.
+    plt.xlim(xm-delta/2, xm+delta/2)
+    ym = (df['feature_distance_y'].min() + df['feature_distance_y'].max()) / 2.
+    plt.ylim(ym-delta/2, ym+delta/2)
+    
     plt.savefig(f'morphology_vs_merfish_{cell_type}.png', dpi=300)
     plt.close()
     

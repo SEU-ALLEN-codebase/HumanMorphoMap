@@ -13,6 +13,19 @@ LOCAL_FEATS = [
     'Average Parent-daughter Ratio',
 ]
 
+mRMR_FEATS = [  # Top 10 features by mRMR
+    'Overall Width',
+    'N_stem',
+    'Average Fragmentation',
+    'Average Bifurcation Angle Local',
+    'Overall Depth',
+    'Average Diameter',
+    'Overall Height',
+    'Average Contraction',
+    'Soma_surface',
+    'Max Path Distance',
+]
+
 IMMUNO_ID = 6208
 
 REG2LOBE = {
@@ -24,6 +37,7 @@ REG2LOBE = {
     'FP.L': 'FL',
     'FP.R': 'FL',
     'FT.L': 'FL',
+    'FL_TL.L': 'FL',    # map to this region
     'IFG': 'FL',
     'IFG.R': 'FL',
     'IPL-near-AG': 'PL',
@@ -48,6 +62,7 @@ REG2LOBE = {
     'SFG.L': 'FL',
     'SFG.R': 'FL',
     'STG': 'TL',
+    'STG.R': 'TL',
     'STG-AP': 'TL',
     'TL.R': 'TL',
     'TL.L': 'TL',
