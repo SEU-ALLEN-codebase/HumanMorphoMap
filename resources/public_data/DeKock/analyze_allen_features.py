@@ -229,7 +229,7 @@ if __name__ == '__main__':
 
     if 1:
         # test the prediction of layers according to morphological features
-        gf_file_pred = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
+        gf_file_pred = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um_cropped_150um_l_measure.csv'
         pred_file = 'predicted_layers_thresholding_outliners.csv'
         predict_layers(gf_file, meta_file, gf_file_pred, pred_file, col_reg='coarse_layer', thresholding_outliners=True)
 
