@@ -14,7 +14,7 @@ import umap
 from sklearn.decomposition import PCA
 import scipy.cluster.hierarchy as sch
 
-from config import standardize_features, LOCAL_FEATS, REG2LOBE
+from config import standardize_features, LOCAL_FEATS, LOCAL_FEATS2, REG2LOBE, mRMR_FEATS
 
 from spatial import spatial_utils   # pylib
 from ml.feature_processing import clip_outliners
@@ -32,7 +32,8 @@ def load_features(gf_crop_file, meta_file, min_neurons=5, standardize=False, rem
 
     df = df[fnames]
     
-    meta = pd.read_csv(meta_file, index_col=0)
+    meta = pd.read_csv(meta_file, index_col='cell_id', encoding='gbk', low_memory=False)
+    assert((meta.index != df.index).sum() == 0)
     col_reg = 'brain_region'
     # 
     #print(np.unique(meta[col_reg])); sys.exit()
@@ -42,7 +43,9 @@ def load_features(gf_crop_file, meta_file, min_neurons=5, standardize=False, rem
         df['region'] = regions
     else:
         df['region'] = meta[col_reg]
-    df['patient'] = meta['patient_id']
+
+    df['patient'] = meta['patient_number']
+    df['ihc'] = meta['immunohistochemistry']
     # filter brain regions with number of neurons smaller than `min_neurons`
     rs, rcnts = np.unique(df.region, return_counts=True)
     rs_filtered = rs[rcnts >= min_neurons]
@@ -223,6 +226,7 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
     def get_cluster_distr(df, cluster_id, pregs, layers, players=('L2/3', 'L4', 'L5/6')):
         cc = id2map.cluster == cluster_id
         cc_ids = cc.index[cc]
+        #print(cluster_id, cc.sum())
 
         # region distribution
         rdict = dict(zip(*np.unique(df.region.loc[cc_ids], return_counts=True)))
@@ -242,7 +246,7 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
             else:
                 ldistr[il] = 0
         # 
-        idistr = np.array([(df.index[cc] > 6208).sum(), (df.index[cc] <= 6208).sum()])
+        iuniq, idistr = np.unique(df[cc].ihc, return_counts=True)
 
         return cc, cc_ids, rdistr, ldistr, idistr
 
@@ -266,6 +270,8 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
         # Formatting
         tname = os.path.split(outfig)[-1].split('_')[0].capitalize()
         ax.set_ylabel('Proportion')
+        if tname == 'Ihc':
+            tname = 'IHC'
         ax.set_title(f'{tname} proportion across clusters')
         ax.legend(title=None, ncol=len(classes), alignment='center', frameon=False,
                   labelspacing=0.1, handletextpad=0.05, borderpad=0.05)
@@ -293,7 +299,9 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
     layers = pd.read_csv(layer_file, index_col=0)
 
 
-    df22 = df.iloc[:,:22].copy()    # features
+    #df22 = df.iloc[:,:22].copy()    # features
+    df22 = df[LOCAL_FEATS2].copy()
+
     # clip the data for extreme values, as this is mostly deficiency in reconstruction
     dfc22 = df22.clip(-3, 3)
     # do mRMR feature selection
@@ -308,7 +316,7 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
     #clustmap = sns.clustermap(dfc22[
     #        ['Number of Tips', 'Average Fragmentation', 'Max Euclidean Distance', 
     #         'Total Length', 'N_stem', 'Average Bifurcation Angle Remote']], cmap='RdBu')
-    clustmap = sns.clustermap(dfc22, cmap='RdBu')
+    clustmap = sns.clustermap(dfc22, cmap='RdBu_r')
     
     # get the clusters
     row_linkage = clustmap.dendrogram_row.linkage
@@ -329,6 +337,7 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
     COLORS = 'rgbcmyk'
     row_cmap = {ie: COLORS[each]
                     for ie, each in zip(salient_cluster_ids, range(len(salient_cluster_ids)))}
+    
     row_colors = []
     for idx in row_clusters:
         if idx in row_cmap:
@@ -337,7 +346,7 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
             row_colors.append('w')
     
     plt.close() # close the previous figure
-    clustmap = sns.clustermap(dfc22, cmap='RdBu', row_colors=row_colors, xticklabels=1,
+    clustmap = sns.clustermap(dfc22, cmap='RdBu_r', row_colors=row_colors, xticklabels=1,
                               cbar_pos=(0.3,0.05,0.02,0.05),
                               #cbar_kws=dict(orientation='horizontal')
                               )
@@ -374,14 +383,20 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
 
     # major layers
     luniq, ldistr = np.unique(layers, return_counts=True)
-    idistr = np.array([(df.index > 6208).sum(), (df.index <= 6208).sum()])
+    iuniq, idistr = np.unique(df.ihc, return_counts=True)
 
-    ccs, cc_ids, cc_rdistrs, cc_ldistrs, cc_idistrs = [], [], [rdistr], [ldistr], [idistr]
-    clusters = ['All']
+    show_overall = False
+    if show_overall:
+        ccs, cc_ids, cc_rdistrs, cc_ldistrs, cc_idistrs = [], [], [rdistr], [ldistr], [idistr]
+        clusters = ['All']
+    else:
+        ccs, cc_ids, cc_rdistrs, cc_ldistrs, cc_idistrs = [], [], [], [], []
+        clusters = []
+
     icluster = 0
     for cid in salient_cluster_ids:
         cc, cc_id, cc_rdistr, cc_ldistr, cc_idistr = get_cluster_distr(df, cid, pregs, layers)
-        clusters.append(f'C{icluster}')
+        clusters.append(f'C{icluster+1}')
         ccs.append(cc)
         cc_ids.append(cc_id)
         cc_rdistrs.append(cc_rdistr)
@@ -404,11 +419,10 @@ def clustering(gf_crop_file, meta_file, layer_file=None):
 
 if __name__ == '__main__':
 
-    gf_crop_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
-    gf_no_crop_file = '/data/kfchen/trace_ws/paper_trace_result/nnunet/proposed_9k/8_estimated_radius_swc_l_measure.csv'
-    meta_file = '/data/kfchen/trace_ws/paper_trace_result/csv_copy/Human_SingleCell_TrackingTable_20240712.csv'
+    gf_crop_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um_cropped_150um_l_measure.csv'
+    gf_no_crop_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+    meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
     layer_file = '../resources/public_data/DeKock/predicted_layers_thresholding_outliners.csv'
-    immuno_id = 6208
     if 0:   # temporary
         from global_features import calc_global_features_from_folder
         swc_dir = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/unified_recon_1um/source500'
@@ -424,6 +438,6 @@ if __name__ == '__main__':
         coembedding_dekock_seu(gf_crop_file, meta_file, layer_file, gf_dekock_file)
 
     if 1:
-        clustering(gf_no_crop_file, meta_file, layer_file)
+        clustering(gf_crop_file, meta_file, layer_file)
 
 

@@ -46,7 +46,8 @@ def exec_mrmr(ffile, meta_file):
     return feats
 
 if __name__ == '__main__':
-    ffile = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/l_measure_result.csv'
-    meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
+    #ffile = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+    ffile = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um_cropped_150um_l_measure.csv'
+    meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
     exec_mrmr(ffile, meta_file)
 

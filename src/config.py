@@ -13,6 +13,15 @@ LOCAL_FEATS = [
     'Average Parent-daughter Ratio',
 ]
 
+LOCAL_FEATS2 = [
+    'N_stem',
+    'Soma_surface',
+    'Average Contraction',
+    'Average Bifurcation Angle Local',
+    'Average Bifurcation Angle Remote',
+    'Average Parent-daughter Ratio',
+]
+
 mRMR_FEATS = [  # Top 10 features by mRMR
     'Overall Width',
     'N_stem',
@@ -23,10 +32,9 @@ mRMR_FEATS = [  # Top 10 features by mRMR
     'Overall Height',
     'Average Contraction',
     'Soma_surface',
-    'Max Path Distance',
+    'Max Branch Order',
 ]
 
-IMMUNO_ID = 6208
 
 REG2LOBE = {
     '(X)FG': 'FL',
