@@ -69,7 +69,7 @@ if __name__ == '__main__':
             merfile = 'EXC_merfish_MTG_mean.csv'
             morfile = 'euc_feat_distances_pyramidal_nannot2_ihc0_mean.csv'
         elif cell_type == 'inh':
-            merfile = 'INH_merfish_MTG_mean.csv'
+            merfile = 'INC_merfish_MTG_mean.csv'
             morfile = 'euc_feat_distances_nonpyramidal_nannot2_ihc0_mean.csv'
         cross_modality(merfile, morfile, cell_type=cell_type)
 

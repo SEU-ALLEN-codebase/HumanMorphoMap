@@ -118,8 +118,8 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
     # get the coordinates
     xy = df_f.loc[df_pca.index, ['adjusted.x', 'adjusted.y']]
     # estimate the relationship for pyramidal cells and non-pyramidal cells
-    ctypes = df_f.loc[df_pca.index, 'cluster_L1'].apply(lambda x: 'EXC' if x=='EXC' else 'INH')
-    #ctypes = df_f.loc[df_pca.index, 'cluster_L1']
+    #ctypes = df_f.loc[df_pca.index, 'cluster_L1'].apply(lambda x: 'EXC' if x=='EXC' else 'INH')
+    ctypes = df_f.loc[df_pca.index, 'cluster_L1']
     
     sns.set_theme(style='ticks', font_scale=2.2)
     for ctype in np.unique(ctypes):

@@ -219,9 +219,12 @@ if __name__ == '__main__':
         #get_neurons(indir, meta_file_tissue, meta_file_neuron, recon_file=gf_file, ihc=ihc)
         get_neurons_JSP(meta_file_tissue_JSP, meta_file_neuron, recon_file=gf_file, ihc=0)
 
-    if 1:
+    if 0:
         tissue_ids1, tissue_ids2 = [('P00065', 'T001')], [('P00066', 'T001')]
         #tissue_ids1, tissue_ids2 = [('P00057', 'T001'), ('P00070', 'T001')], [('P00062', 'T001'), ('P00064', 'T001')]
         compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=ihc)
+
+    if 1:
+        morphology_vs_distance()
 
 

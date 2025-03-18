@@ -12,7 +12,7 @@ import seaborn as sns
 
 from config import REG2LOBE
 
-def check_extreme_neurons(gf_file, meta_file, update_file, fn, display=False):
+def check_extreme_neurons(gf_file, meta_file, update_file, fn, pn=0.95, display=False):
 
     ############# helper functions #############
     def histplot(top5_meta, meta, ftype='age'):
@@ -67,7 +67,6 @@ def check_extreme_neurons(gf_file, meta_file, update_file, fn, display=False):
     dfs = df[display_feats]
 
     # Extract the top N% and lowest N% neurons acoording
-    pn = 0.95
     thresh1 = df[fn].quantile(pn)
     thresh2 = df[fn].quantile(1-pn)
     print(f"Threshold for top and low {pn*100}%: {thresh1} and {thresh2}")
@@ -80,6 +79,8 @@ def check_extreme_neurons(gf_file, meta_file, update_file, fn, display=False):
     top5_values = top5_percent[fn].values
     top5_meta = meta.loc[top5_percent.index]
     top5_meta_new_ids = dfu.loc[top5_meta.index]
+
+    import ipdb; ipdb.set_trace()
 
     #low5_names = low5_percent.index.values
     low5_values = low5_percent[fn].values
@@ -150,11 +151,11 @@ if __name__ == '__main__':
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
     update_file = '../meta/update_cellID_00001-50212.csv'
 
-    if 0:
+    if 1:
         fn = 'N_stem'
         check_extreme_neurons(gf_file, meta_file, update_file, fn, display=True)
 
-    if 1:
+    if 0:
         datasets = {
             'SEU-H8K': '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv',
             'DeKock': '../resources/public_data/DeKock/intermediates/gf_one_point_soma_150um.csv',
