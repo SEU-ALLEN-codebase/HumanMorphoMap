@@ -9,8 +9,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import SimpleITK as sitk
 
-from config import IMMUNO_ID
+#from config import IMMUNO_ID
 from file_io import load_image
 
 def keep_samples(sample_dir, meta_n):
@@ -205,6 +206,14 @@ def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1, 
     #import ipdb; ipdb.set_trace()
     print()
     
+def morphology_vs_distance(seg_dir, seg_ann_file, meta_file_tissue):
+    # parse seg_ann_file
+    seg_ann = pd.read_csv(seg_ann_file, index_col='subject', usecols=(1,2,3))
+    # get all the segmentations and estimate the distances
+    meta_t = pd.read_csv(meta_file_tissue, index_col=0)
+    import ipdb; ipdb.set_trace()
+    print()
+    
 
 
 if __name__ == '__main__':
@@ -225,6 +234,9 @@ if __name__ == '__main__':
         compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=ihc)
 
     if 1:
-        morphology_vs_distance()
+        meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
+        seg_dir = '/data/PBS/SEU-ALLEN/Users/ZhixiYun/data/HumanNeurons/sample_annotation'
+        seg_ann_file = '../meta/seg_info_250317_fromDB.csv'
+        morphology_vs_distance(seg_dir, seg_ann_file, meta_file_tissue)
 
 
