@@ -78,6 +78,25 @@ REG2LOBE = {
     'TP.L': 'TL',
 }
 
+def to_PID5(pid):
+    # standardize the patitent id to 'P' + '05d' format
+    if len(pid) == 4:
+        return f'{pid[0]}00{pid[1:]}'
+    elif len(pid) == 6:
+        return pid
+    else:
+        raise ValueError
+
+def to_TID3(tid):
+    # standardize the tissue/sample id to 'T' + '03d' format
+    if len(tid) == 3:
+        return f'{tid[0]}0{tid[1:]}'
+    elif len(tid) == 4:
+        return tid
+    else:
+        return ValueError
+
+
 def standardize_features(dfc, feat_names, epsilon=1e-8, inplace=True):
     fvalues = dfc[feat_names]
     fvalues = (fvalues - fvalues.mean()) / (fvalues.std() + epsilon)

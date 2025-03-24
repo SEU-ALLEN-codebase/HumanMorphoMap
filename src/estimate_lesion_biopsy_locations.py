@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import SimpleITK as sitk
 
-#from config import IMMUNO_ID
+from config import to_PID5, to_TID3
 from file_io import load_image
 
 def keep_samples(sample_dir, meta_n):
@@ -206,11 +206,136 @@ def compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=1, 
     #import ipdb; ipdb.set_trace()
     print()
     
-def morphology_vs_distance(seg_dir, seg_ann_file, meta_file_tissue):
+def morphology_vs_distance2lesion(seg_dir, seg_ann_file, meta_file_neuron, meta_file_sample):
     # parse seg_ann_file
-    seg_ann = pd.read_csv(seg_ann_file, index_col='subject', usecols=(1,2,3))
+    seg_ann = pd.read_csv(seg_ann_file, index_col='subject', usecols=(1,2,3,4,5))
     # get all the segmentations and estimate the distances
-    meta_t = pd.read_csv(meta_file_tissue, index_col=0)
+    meta_n = pd.read_csv(meta_file_neuron, index_col=0, low_memory=False, encoding='gbk')
+    meta_s = pd.read_csv(meta_file_sample, index_col=0, low_memory=False)
+
+    JSP_problematics = ['NanJ-JSP-ZDL-01', 'NanJ-JSP-ZXB-01']
+
+    # reformat the sample-informations from JSP
+    seg2PT = []
+    subject_names = []
+    for irow, row in seg_ann.iterrows():
+        sub_id, sub_name = irow.split('_')
+        if ' ' in sub_name:
+            city = sub_name.split(' ')[0]
+            hospital, operator = sub_name.split(' ')[1].split('-')[:2]
+        else:
+            city, hospital, operator = sub_name.split('-')[:3]
+        # we use JSP only for this analyses
+        if hospital != 'JSP':
+            continue
+        # get the path
+        seg_path = os.path.join(seg_dir, irow, 'Segmentation.seg.nrrd')
+        if not os.path.exists(seg_path):
+            seg_path = os.path.join(seg_dir, irow, 'Segmentation_1.seg.nrrd')
+
+        seg2PT.append([sub_id, irow, city, hospital, operator, row.label, row['name'], row['sample_id_seu'], row['channel'], seg_path])
+        subject_names.append(sub_name)
+
+    seg2PT = pd.DataFrame(seg2PT, index=subject_names,
+                columns=('subject_id', 'subject', 'city', 'hospital', 'operator', 'label', 'seg_name', 'sample_id_seu', 'channel', 'seg_file'))
+    
+    # Find out the correspondence of seg to PTRSB
+    matched = []
+    unmatched = []
+    matched_seg2PT = []
+    seg_ptrsb = []
+    for irow, row in meta_s.iterrows():
+        if row.patient_number is np.NaN or row.patient_number in(['-', '--']):
+            continue
+        # discard the problematic samples
+        if row.sample_id in JSP_problematics:
+            continue
+
+        pid, tid = row.patient_number, row.tissue_id
+        # matching
+        sample_id = row.sample_id
+        k1 = sample_id
+        k2 = '-'.join(sample_id.split('-')[:-1])
+        k3 = sample_id.replace('-', ' ', 1)
+        k4 = '-'.join(sample_id.replace('-', ' ', 1).split('-')[:-1])
+
+        found = False
+        for ki in [k1, k2, k3, k4]:
+            if ki in seg2PT.index:
+                cur_segs = seg2PT.loc[ki]
+                matched.append(cur_segs.index[0])
+                matched_seg2PT.append(sample_id)
+                
+                found = True
+                break
+
+        if (not found) and (sample_id in ['NanJ-JSP-XFY-01', 'NanJ-JSP-XFY-02']):
+            cur_segs = seg2PT.loc['NanJ-JSP-XFY-01-02']
+            matched.append(cur_segs.index[0])
+            matched_seg2PT.append('NanJ-JSP-XFY-01-02')
+
+            found = True
+
+        if not found:
+            unmatched.append(sample_id)
+            
+        # tissue matching
+        if found:
+            if cur_segs.ndim == 1:
+                print(f'!!![Error] Only one mask is found in {cur_segs.subject}')
+                continue
+
+            if (cur_segs.seg_name == 'tumor').sum() != 1:
+                print(f'!!![Error] The current sample {row.sample_id} has incorrect segmentation mask: {cur_segs.seg_name}')
+                continue
+            
+            tumor_label = cur_segs[cur_segs.seg_name == 'tumor'].label.iloc[0]
+            samples = cur_segs[cur_segs.seg_name == 'sample']
+            if samples.shape[0] == 1:
+                # The information are matched
+                sample_label = samples.iloc[0].label
+            elif samples.shape[0] == 0:
+                print(f'!!![Error] No sample mask is found in {cur_segs.iloc[0].subject}')
+                continue
+            elif samples.shape[0] > 1:
+                # match according to T-coding
+                tid3 = to_TID3(tid)
+                if (samples.sample_id_seu == tid3).sum() == 1: 
+                    # found the correspondence
+                    sample_label = samples[samples.sample_id_seu == tid3]['label'].values[0]
+                else:
+                    print(f'--> {cur_segs.iloc[0].subject}')
+                    continue
+
+            # get the information
+            seg_ptrsb.append([row.sample_id, cur_segs.iloc[0]['subject'], to_PID5(pid), to_TID3(tid),
+                              tumor_label, sample_label, cur_segs.iloc[0]['seg_file']])
+
+
+    seg_ptrsb = pd.DataFrame(seg_ptrsb, columns=('sample_id', 'seg_id', 'pid5', 'tid3', 
+                                'tumor_label', 'sample_label', 'seg_file'))
+    seg_ptrsb = seg_ptrsb.set_index('sample_id')
+    
+    # estimate the distance from sample to tumor
+    for irow, row in seg_ptrsb.iterrows():
+        seg_id, pid5, tid5, tumor_label, sample_label, seg_file = row
+        # load the segmentation
+        img_seg = sitk.ReadImage(seg_file)
+        img_arr = sitk.GetArrayFromImage(img_seg)
+        if seg_id == '281_NanJ-JSP-JLX-01':
+            tumor_mask = img_arr[:,:,:,0] == tumor_label
+            sample_mask = img_arr[:,:,:,1] == sample_label
+        else:
+            tumor_mask = img_arr == tumor_label
+            sample_mask = img_arr = sample_label
+        
+        # calculate the distance
+        
+        
+        import ipdb; ipdb.set_trace()
+        print()
+
+    print(len(matched), matched)
     import ipdb; ipdb.set_trace()
     print()
     
@@ -234,9 +359,9 @@ if __name__ == '__main__':
         compare_neurons(tissue_ids1, tissue_ids2, meta_file_neuron, gf_file, ihc=ihc)
 
     if 1:
-        meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
-        seg_dir = '/data/PBS/SEU-ALLEN/Users/ZhixiYun/data/HumanNeurons/sample_annotation'
-        seg_ann_file = '../meta/seg_info_250317_fromDB.csv'
-        morphology_vs_distance(seg_dir, seg_ann_file, meta_file_tissue)
+        meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
+        seg_dir = '/PBshare/SEU-ALLEN/Users/ZhixiYun/data/HumanNeurons/sample_annotation'
+        seg_ann_file = '../meta/seg_info_250317_fromDB_yufeng0324.csv'
+        morphology_vs_distance2lesion(seg_dir, seg_ann_file, meta_file_neuron, meta_file_tissue_JSP)
 
 
