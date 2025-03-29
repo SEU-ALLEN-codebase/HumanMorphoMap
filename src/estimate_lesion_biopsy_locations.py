@@ -12,6 +12,8 @@ import seaborn as sns
 import SimpleITK as sitk
 from scipy.ndimage import center_of_mass
 from scipy.spatial.distance import cdist
+from scipy.stats import linregress, mannwhitneyu
+
 
 from config import to_PID5, to_TID3
 from file_io import load_image
@@ -265,6 +267,7 @@ def calculate_distance2tumor(seg_dir, seg_ann_file, meta_file_sample, dist2tumor
             hospital, operator = sub_name.split(' ')[1].split('-')[:2]
         else:
             city, hospital, operator = sub_name.split('-')[:3]
+        
         # we use JSP only for this analyses
         if hospital != 'JSP':
             continue
@@ -364,12 +367,17 @@ def calculate_distance2tumor(seg_dir, seg_ann_file, meta_file_sample, dist2tumor
         # load the segmentation
         img_seg = sitk.ReadImage(seg_file)
         img_arr = sitk.GetArrayFromImage(img_seg)
-        if seg_id == '281_NanJ-JSP-JLX-01':
+
+        if seg_id in ['281_NanJ-JSP-JLX-01', '274_NanJ-JSP-WZB-01']:
             tumor_mask = img_arr[:,:,:,0] == tumor_label
             sample_mask = img_arr[:,:,:,1] == sample_label
         else:
             tumor_mask = img_arr == tumor_label
             sample_mask = img_arr == sample_label
+
+        # check if there are different
+        if np.array_equal(tumor_mask, sample_mask):
+            raise ValueError('The tumor mask and sample mask are the same!')
         
         # calculate the distance
         dist = calculate_min_distance_to_tumor(tumor_mask, sample_mask, img_seg)
@@ -381,46 +389,171 @@ def calculate_distance2tumor(seg_dir, seg_ann_file, meta_file_sample, dist2tumor
     seg_ptrsb.to_csv(dist2tumor_file, index=True)
     
 
-def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ihc=0):
+def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_file, ihc=0):
 
     ############### Helper functions ################
-    def _plot(gfs_cur, min_samples=3):
+    # 标注显著性
+    def get_stars(p):
+        if p < 0.001:
+            return '***'
+        elif p < 0.01:
+            return '**'
+        elif p < 0.05:
+            return '*'
+        else:
+            return 'ns'
+
+
+    def _plot(gfs_cur, figname, min_counts=10, bins=[0,5,100]):
         sns.set_theme(style='ticks', font_scale=1.6)
+        display_features = {
+            'Soma_surface': 'Soma surface',
+            'N_stem': 'Number of Stems',
+            'Number of Branches': 'Number of Branches',
+            #'Number of Tips': 'Number of Tips',
+            'Average Diameter': 'Avg. Diameter',
+            'Total Length': 'Total Length',
+            'Max Branch Order': 'Max Branch Order',
+            'Average Contraction': 'Avg. Straightness',
+            'Average Fragmentation': 'Avg. Branch Length',
+            'Average Parent-daughter Ratio': 'Avg. Parent-daughter Ratio',
+            'Average Bifurcation Angle Local': 'Avg. Bif. Angle Local',
+            'Average Bifurcation Angle Remote': 'Avg. Bif. Angle Remote', 
+            'Hausdorff Dimension': 'Hausdorff Dimension',
+        }
+
+        # 数据准备
+        # rename the features
+        gfs_cur.rename(columns=display_features, inplace=True)
+        features = display_features.values()   #gfs_cur.columns[:-1]  # 所有特征列（排除 distance）
+        gfs_cur['distance_bin'] = pd.cut(
+            gfs_cur['distance'],
+            #bins=np.arange(gfs_cur['distance'].min(), gfs_cur['distance'].max() + bin_width, bin_width),
+            bins = bins,
+            right=False
+        )
+        intervals, interval_counts = np.unique(gfs_cur.distance_bin, return_counts=True)
+        gfs_cur = gfs_cur[gfs_cur.distance_bin.isin(intervals[interval_counts >= min_counts])]
+        print(f"Number of samples per distance_bin: {gfs_cur.groupby('distance_bin', observed=False)['pt_code'].nunique()}")
+         
         
-        gfs_filtered = gfs_cur.groupby('distance').filter(lambda x: len(x) >= min_samples)
+        # 计算全局 y 轴范围（排除异常值）
+        y_limits = {}
+        for feature in features:
+            q1 = gfs_cur[feature].quantile(0.25)
+            q3 = gfs_cur[feature].quantile(0.75)
+            iqr = q3 - q1
+            y_min = q1 - 2.0 * iqr
+            y_max = q3 + 2.0 * iqr
+            y_limits[feature] = (y_min, y_max)
 
-        features = gfs_filtered.columns[:-1]  # 所有特征列（排除最后一列 distance）
-        distance_values = gfs_filtered['distance'].unique()  # 离散的 distance 值
-        distance_values.sort()  # 排序
-
-        # 设置多子图
+        # 设置图形（4 列子图）
         n_features = len(features)
-        fig, axes = plt.subplots(n_features, 1, figsize=(6, 1.5 * n_features), sharex=True)
+        n_cols = 4
+        n_rows = int(np.ceil(n_features / n_cols))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows), sharex=True)
+        axes = axes.flatten()
 
-        # 为每个特征绘制子图
-        for ax, feature in zip(axes, features):
+        # 为每个特征绘制箱线图和回归线
+        for i, feature in enumerate(features):
+            ax = axes[i]
             
-            # 折线图：均值趋势线
-            sns.lineplot(
-                data=gfs_filtered,
-                x='distance',
+            # 箱线图（调整宽度为 0.5）
+            sns.boxplot(
+                data=gfs_cur,
+                x='distance_bin',
                 y=feature,
-                estimator='mean',  # 显示均值趋势
-                errorbar=None,     # 不显示误差线
                 ax=ax,
-                color='royalblue',
-                linewidth=2,
-                label='Mean'
+                width=0.4,  # 更窄的箱体
+                color='skyblue',
+                showmeans=False,
+                linewidth=3,
+                meanprops={'marker': 'o', 'markerfacecolor': 'red', 'linewidth': 3}
             )
             
-            ax.set_title(f'{feature} vs Distance', fontsize=12)
-            ax.set_ylabel(feature)
-            ax.legend()
+            
+            # 计算每个分箱的均值并绘制回归线
+            bin_means = gfs_cur.groupby('distance_bin', observed=False)[feature].median().reset_index()
+            bin_means['bin_mid'] = bin_means['distance_bin'].apply(lambda x: x.mid)  # 取区间中点
+            bin_means = bin_means[~bin_means[feature].isna()]
 
-        # 共享 x 轴标签
-        axes[-1].set_xlabel('Distance', fontsize=12)
+            # 在每组箱体的中位数位置添加红色圆点
+            x_positions = np.arange(len(bin_means))  # 箱线图的x轴位置（0, 1, 2,...）
+            #x_positions = [ax.get_xticks()[i] for i in range(len(bin_means))]
+            #print(x_positions, bin_means[feature])
+            ax.scatter(
+                x_positions, 
+                bin_means[feature], 
+                color="red", 
+                marker="o", 
+                zorder=50,  # 确保圆点显示在最上层
+                s=50,
+            )
 
-        plt.savefig('tmp.png', dpi=300)
+            # 绘制基线：第一个串口均值为准
+            baseline = bin_means[feature].iloc[0]
+            ax.axhline(y=baseline, color='orange', linestyle='--', linewidth=2)
+            
+            '''
+            # 线性回归
+            slope, intercept, r_value, p_value, std_err = linregress(
+                bin_means['bin_mid'],
+                bin_means[feature]
+            )
+            reg_line = intercept + slope * bin_means['bin_mid'].astype(float)
+            
+            # 绘制回归线
+            ax.plot(
+                bin_means.index,  # x 轴为分箱序号
+                reg_line,
+                color='green',
+                linestyle='--',
+                #label=f'Slope: {slope:.2f}\nR²: {r_value**2:.2f}'
+            )
+            '''
+
+            # do statistical test
+            group1 = gfs_cur[gfs_cur['distance_bin'] == bin_means['distance_bin'][0]][feature]
+            group2 = gfs_cur[gfs_cur['distance_bin'] == bin_means['distance_bin'][1]][feature]
+            u_stat, p_value = mannwhitneyu(group1, group2, alternative='two-sided')
+            # 绘制横线和星号
+            x1, x2 = 0.15, 0.85
+            y_min, y_max = y_limits[feature]  # 标注的y轴位置
+            y_delta = (y_max - y_min)
+            
+            y1, y2 = y_max-0.15*y_delta, y_max-0.11*y_delta
+            ax.plot([x1, x1, x2, x2], [y1, y2, y2, y1], lw=2, color='red')
+            stars = get_stars(p_value)
+            y_text = y2 if stars == 'ns' else y1
+            ax.text((x1+x2)*0.5, y_text, stars, 
+                   ha='center', va='bottom', color='red')
+            
+
+            # 设置 y 轴范围（排除异常值）
+            ax.set_ylim(y_limits[feature])
+            #ax.set_xlim(0.5, 5.5)
+            
+            # 标签和标题
+            ax.set_title(feature)
+            ax.set_ylabel('')
+            ax.set_xlabel('Distance to tumor (mm)')
+            ax.tick_params(axis='x', rotation=0)
+            ax.tick_params(axis='y', direction='in')
+            ax.set_xticks([0, 1])
+            ax.set_xticklabels(('<= 5', '> 5'), ha="center")
+            
+            # bold
+            ax.spines['left'].set_linewidth(2)
+            ax.spines['right'].set_linewidth(2)
+            ax.spines['top'].set_linewidth(2)
+            ax.spines['bottom'].set_linewidth(2)
+            #ax.legend()
+
+        # 隐藏多余子图
+        for j in range(i + 1, len(axes)):
+            axes[j].axis('off')
+
+        plt.savefig(figname, dpi=300)
         plt.close()
 
     ############# End of Helper functions ###########
@@ -429,6 +562,7 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ihc=0)
     meta_n = pd.read_csv(meta_file_neuron, index_col=0, low_memory=False, encoding='gbk')
     gfs = pd.read_csv(gf_file, index_col=0, low_memory=False)
     dists = pd.read_csv(dist2tumor_file, index_col=0)
+    ctypes = pd.read_csv(ctype_file, index_col=0)
 
     # extract neurons
     # 1. ihc extraction
@@ -438,20 +572,34 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ihc=0)
     meta_n['pt_code'] = meta_n['patient_number'] + '-' + meta_n['tissue_block_number']
     tissue_mask = (meta_n['pt_code']).isin(dists['pt_code'])
     # 3. cell type extraction: to be added
+    ctypes_idxs = [int(name.split('_')[0]) for name in ctypes.index]
+    ctypes = ctypes.reset_index()
+    ctypes.index = ctypes_idxs
+    # get the cell types
+    ctypes_ = ctypes.loc[gfs.index]
+    py_mask = (ctypes_.num_annotator >= 2) & (ctypes_.CLS2 == '0')
+    nonpy_mask = (ctypes_.num_annotator >= 2) & (ctypes_.CLS2 == '1')
+
+    ctype_dict = {
+        'pyramidal': py_mask,
+        'nonpyramidal': nonpy_mask,
+    }
     
     # morphological analysis
-    import ipdb; ipdb.set_trace()
-    gfs_cur = gfs[(ihc_mask & tissue_mask).values]
-    meta_n_cur = meta_n[ihc_mask & tissue_mask]
+    for ctype, ctype_mask in ctype_dict.items():
+        c_mask = (ihc_mask & tissue_mask).values & ctype_mask.values
+        gfs_cur = gfs[c_mask]
+        meta_n_cur = meta_n[c_mask]
+        print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
     
-    # calculate the feature versus the distance
-    dists_re = dists.set_index('pt_code')
-    dists_to_tumor = dists_re.loc[meta_n_cur['pt_code'], 'dist2tumor']
-    gfs_cur['distance'] = dists_to_tumor.values
+        # calculate the feature versus the distance
+        dists_re = dists.set_index('pt_code')
+        dists_to_tumor = dists_re.loc[meta_n_cur['pt_code'], 'dist2tumor']
+        gfs_cur['distance'] = dists_to_tumor.values
+        gfs_cur['pt_code'] = dists_re.loc[meta_n_cur['pt_code']].index.values
     
-    # visualization
-    
-    pass   
+        # visualization
+        _plot(gfs_cur, f'morph_vs_dist2tumor_{ctype}.png')
 
 
 if __name__ == '__main__':
@@ -477,7 +625,8 @@ if __name__ == '__main__':
         seg_dir = '/PBshare/SEU-ALLEN/Users/ZhixiYun/data/HumanNeurons/sample_annotation'
         seg_ann_file = '../meta/seg_info_250317_fromDB_yufeng0324.csv'
         dist2tumor_file = './caches/dist2tumor_0325.csv'
+        ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
         #calculate_distance2tumor(seg_dir, seg_ann_file, meta_file_tissue_JSP, dist2tumor_file)
-        analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ihc=1)
+        analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_file, ihc=1)
 
 
