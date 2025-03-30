@@ -416,10 +416,10 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_
             'Max Branch Order': 'Max Branch Order',
             'Average Contraction': 'Avg. Straightness',
             'Average Fragmentation': 'Avg. Branch Length',
-            'Average Parent-daughter Ratio': 'Avg. Parent-daughter Ratio',
-            'Average Bifurcation Angle Local': 'Avg. Bif. Angle Local',
-            'Average Bifurcation Angle Remote': 'Avg. Bif. Angle Remote', 
-            'Hausdorff Dimension': 'Hausdorff Dimension',
+            #'Average Parent-daughter Ratio': 'Avg. Parent-daughter Ratio',
+            #'Average Bifurcation Angle Local': 'Avg. Bif. Angle Local',
+            #'Average Bifurcation Angle Remote': 'Avg. Bif. Angle Remote', 
+            #'Hausdorff Dimension': 'Hausdorff Dimension',
         }
 
         # 数据准备
@@ -451,7 +451,7 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_
         n_features = len(features)
         n_cols = 4
         n_rows = int(np.ceil(n_features / n_cols))
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows), sharex=True)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows), sharex=True)
         axes = axes.flatten()
 
         # 为每个特征绘制箱线图和回归线
@@ -531,7 +531,7 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_
 
             # 设置 y 轴范围（排除异常值）
             ax.set_ylim(y_limits[feature])
-            #ax.set_xlim(0.5, 5.5)
+            ax.set_xlim(-0.5, 1.5)
             
             # 标签和标题
             ax.set_title(feature)
