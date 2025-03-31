@@ -56,8 +56,8 @@ def add_significance(ax, data1, data2, x1, x2, y_max, y_min, y_offset):
 
 def comparing_cell_types(cell_type_file, gf_file, meta_file_neuron, ihc=0, lobe='TL'):
     CELL_DICT = {
-        'pyramidal': 0,
-        'nonpyramidal': 1
+        'pyramidal': '0',
+        'nonpyramidal': '1'
     }
     show_features = [
         'N_stem', 'Number of Branches', 'Number of Tips',
@@ -103,7 +103,7 @@ def comparing_cell_types(cell_type_file, gf_file, meta_file_neuron, ihc=0, lobe=
     gfs_pnp['cell_type'] = 'nonpyramidal'
     gfs_pnp.loc[gfs_p.index, 'cell_type'] = 'pyramidal'
 
-    if 0:
+    if 1:
         # separability on UMAP space
         gfs_pnp_s = gfs_pnp.drop([sf for sf in show_features if sf not in show_features_umap], axis=1)
         standardize_features(gfs_pnp_s, gfs_pnp_s.columns[:-1], inplace=True)
@@ -129,7 +129,7 @@ def comparing_cell_types(cell_type_file, gf_file, meta_file_neuron, ihc=0, lobe=
         if xname == 'lobe':
             gfs_pnp['lobe'] = meta_n.loc[gfs_pnp.index, 'lobe']
             #gfs.pnp = gfs_pnp[gfs_pnp['lobe'].isin(xtypes[:2])]
-            gfs_pnp = gfs_pnp[gfs_pnp['cell_type'] == 'nonpyramidal']
+            gfs_pnp = gfs_pnp[gfs_pnp['cell_type'] == 'pyramidal']
         gfs_pnp_long = gfs_pnp.melt(id_vars=[xname], value_vars=feature_columns, 
                       var_name='Feature', value_name='Value')
         
@@ -342,13 +342,13 @@ def comparing_levelwise(swc_dir, cell_type_file, meta_file_neuron, ihc=0, cache_
     
 
 if __name__ == '__main__':
-    cell_type_file = '../meta/cell_type_annot_rating_cls2_yufeng_unique.csv'
+    #cell_type_file = '../meta/cell_type_annot_rating_cls2_yufeng_unique.csv'
+    cell_type_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
     meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
-    #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
     gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um_cropped_150um_l_measure.csv'
     ihc = 0
 
-    if 1:
+    if 0:
         lobe = 'all'
         comparing_cell_types(cell_type_file, gf_file, meta_file_neuron, ihc=0, lobe=lobe)
 
