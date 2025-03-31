@@ -588,7 +588,7 @@ def analyze_morph_by_distance(meta_file_neuron, gf_file, dist2tumor_file, ctype_
     # morphological analysis
     for ctype, ctype_mask in ctype_dict.items():
         c_mask = (ihc_mask & tissue_mask).values & ctype_mask.values
-        gfs_cur = gfs[c_mask]
+        gfs_cur = gfs[c_mask].copy()
         meta_n_cur = meta_n[c_mask]
         print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
     
