@@ -78,6 +78,19 @@ REG2LOBE = {
     'TP.L': 'TL',
 }
 
+
+def region_mapper():
+    reg_mapper = {}
+    for reg in REG2LOBE.keys():
+        reg_lr = reg.replace('.L', '').replace('.R', '')
+        reg_lr = reg_lr.replace('-near-AG', '')
+        if reg_lr == 'PL_OL': reg_lr = 'P(O)L'
+        elif reg_lr == 'FL_TL': reg_lr = 'F(T)L'
+
+        reg_mapper[reg] = reg_lr
+
+    return reg_mapper
+
 def to_PID5(pid):
     # standardize the patitent id to 'P' + '05d' format
     if len(pid) == 4:

@@ -5,6 +5,7 @@
 ##########################################################
 import os
 import glob
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -32,15 +33,15 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
     def _plot(gfs_cur, figname):
         sns.set_theme(style='ticks', font_scale=1.8)
         display_features = {
-            'Soma_surface': 'Soma surface',
-            'N_stem': 'Number of Stems',
-            'Number of Branches': 'Number of Branches',
+            'Soma_surface': r'Soma surface ($μm^2$)',
+            #'N_stem': 'Number of Stems',
+            #'Number of Branches': 'Number of Branches',
             #'Number of Tips': 'Number of Tips',
-            'Average Diameter': 'Avg. Diameter',
-            'Total Length': 'Total Length',
-            'Max Branch Order': 'Max Branch Order',
-            'Average Contraction': 'Avg. Straightness',
-            'Average Fragmentation': 'Avg. Branch Length',
+            'Average Diameter': 'Avg. Diameter (μm)',
+            'Total Length': 'Total Length (μm)',
+            #'Max Branch Order': 'Max Branch Order',
+            #'Average Contraction': 'Avg. Straightness',
+            #'Average Fragmentation': 'Avg. Branch Length',
             #'Average Parent-daughter Ratio': 'Avg. Parent-daughter Ratio',
             #'Average Bifurcation Angle Local': 'Avg. Bif. Angle Local',
             #'Average Bifurcation Angle Remote': 'Avg. Bif. Angle Remote', 
@@ -70,7 +71,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
 
         # 设置图形（4 列子图）
         n_features = len(features)
-        n_cols = 4
+        n_cols = 3
         n_rows = int(np.ceil(n_features / n_cols))
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows), sharex=True)
         axes = axes.flatten()
@@ -188,32 +189,128 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
     py_mask = (ctypes_.num_annotator >= 2) & (ctypes_.CLS2 == '0')
     nonpy_mask = (ctypes_.num_annotator >= 2) & (ctypes_.CLS2 == '1')
 
-    ctype_dict = {
-        'pyramidal': py_mask,
-        'nonpyramidal': nonpy_mask,
-    }
+    # merge with the tissue-type
+    c_mask = (ihc_mask & tissue_mask).values & (py_mask | nonpy_mask).values
+    gfs_c = gfs[c_mask].copy()
+    meta_n_c = meta_n[c_mask]
     
-    # morphological analysis
-    for ctype, ctype_mask in ctype_dict.items():
-        c_mask = (ihc_mask & tissue_mask).values & ctype_mask.values
-        gfs_cur = gfs[c_mask].copy()
-        meta_n_cur = meta_n[c_mask]
-        print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
-    
-        # calculate the feature versus tissue-type
-        meta_t_re = meta_t.set_index('pt_code')
-        tissue_types = meta_t_re.loc[meta_n_cur['pt_code'], 'tissue_type']
+    meta_t_c = meta_t.set_index('pt_code')
+    tissue_types = meta_t_c.loc[meta_n_c['pt_code'], 'tissue_type']
+    gfs_c['tissue_type'] = tissue_types.values
+    gfs_c['pt_code'] = tissue_types.index.values
 
-        gfs_cur['tissue_type'] = tissue_types.values
-        gfs_cur['pt_code'] = tissue_types.index.values
-        # rename the Chinese to English
-        gfs_cur['tissue_type'] = gfs_cur['tissue_type'].replace({
-            '正常': 'normal',
-            '浸润': 'infiltration'
-        })
-    
-        # visualization
-        _plot(gfs_cur, f'morph_vs_tissue-types_{ctype}.png')
+    ctype_dict = {
+        '0':'pyramidal',
+        '1':'nonpyramidal',
+    }
+    gfs_c['cell_type'] = ctypes.loc[gfs_c.index, 'CLS2'].map(ctype_dict)
+
+    # rename the Chinese to English
+    gfs_c['tissue_type'] = gfs_c['tissue_type'].replace({
+        '正常': 'normal',
+        '浸润': 'infiltration'
+    })
+
+    if 0:
+        # morphological analysis
+        for ctype_id, ctype in ctype_dict.items():
+            gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
+            print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
+        
+            # visualization
+            _plot(gfs_cur, f'morph_vs_tissue-types_{ctype}.png')
+
+
+    if 1:
+        sns.set_theme(style='ticks', font_scale=2.2)
+
+        # estimate the pyramidal/nonpyramidal cell ratio
+        np_ratios = {
+            'normal': [],
+            'infiltration': []
+        }
+        random.seed(1024)   # for duplication
+        for t_type in np_ratios.keys():
+            gfs_cur = gfs_c[gfs_c['tissue_type'] == t_type]
+            tissues = np.unique(gfs_cur.pt_code)
+            print(tissues)
+            for it in range(5):
+                sel_tissues = random.sample(tissues.tolist(), len(tissues)//2+1)
+                gfs_cur_sel = gfs_cur[gfs_cur.pt_code.isin(sel_tissues)]
+                # calculate the p:np ratio
+                num_np, num_p = np.unique(gfs_cur_sel.cell_type, return_counts=True)[1]
+                np_ratio = 100.0 * num_np / (num_np + num_p)
+                np_ratios[t_type].append(np_ratio)
+
+        # convert the np.array
+        for t_type, ratios in np_ratios.items():
+            np_ratios[t_type] = np.array(ratios)
+
+        # plot
+        means = {key: np.mean(values) for key, values in np_ratios.items()}
+        sems = {
+            key: np.std(values, ddof=1) / np.sqrt(len(values))  # SEM = 标准差 / sqrt(n)
+            for key, values in np_ratios.items()
+        }
+        # 绘图设置
+        groups = list(np_ratios.keys())
+        x_pos = np.arange(len(groups))  # 组的位置
+        colors = ['skyblue', 'lightcoral']  # 每组颜色
+
+        plt.figure(figsize=(6, 6))  # 正方形图像
+        # 绘制柱状图
+        plt.bar(
+            x_pos,
+            [means[group] for group in groups],
+            yerr=[sems[group] for group in groups],  # 误差线=SEM
+            width=0.35,
+            linewidth=3,
+            capsize=7,  # 误差线端盖长度
+            color=colors,
+            alpha=0.9,
+            edgecolor='black',
+            error_kw = {
+                'lw': 3,
+                'capthick': 3,
+                'capsize': 9,
+                'ecolor': 'black', 
+            },
+        )
+
+        # statistical test
+        u_stat, p_value = mannwhitneyu(*np_ratios.values())
+        print(f'p_value for the percentages: {p_value:.4e}')
+
+        # 添加标签和标题
+        gbar = plt.gca()
+        gbar.spines['left'].set_linewidth(3)
+        gbar.spines['right'].set_linewidth(3)
+        gbar.spines['top'].set_linewidth(3)
+        gbar.spines['bottom'].set_linewidth(3)
+
+        # 设置刻度线宽度和样式
+        plt.tick_params(
+            axis='both',      # 同时调整x轴和y轴
+            width=3,          # 刻度线宽度
+            length=7,         # 刻度线长度
+            #labelsize=12,     # 刻度标签字体大小
+            bottom=True,      # 显示底部刻度
+            top=False,        # 不显示顶部刻度
+            left=True,        # 显示左侧刻度
+            right=False       # 不显示右侧刻度
+        )
+        
+        plt.xlim(-0.5, 1.5)
+        plt.ylim(0, 30)
+        plt.xticks(x_pos, groups)
+        plt.xlabel('Tissue types')
+        plt.ylabel('Percentage of nonpyramidal cells')
+        plt.subplots_adjust(left=0.17, bottom=0.17)
+        #plt.title('Comparison of NP Ratios (Mean ± SEM)')
+        plt.savefig('nonpyramidal_percentage_across_tissue_types.png', dpi=300)
+        plt.close()
+
+        print()
 
 
 if __name__ == '__main__':
