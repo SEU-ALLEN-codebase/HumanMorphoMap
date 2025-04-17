@@ -43,7 +43,7 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     '''
 
     df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, max_dist+0.001, num), right=False)
-    median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
+    median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
     median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
     median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
     # remove low-count bins, to avoid randomness
@@ -115,7 +115,7 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp',
 
 
 if __name__ == '__main__':
-    ntype = 'dendrite'
+    ntype = 'final'
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
     spos_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1891_soma_pos.csv'
     sreg_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1876_soma_region.csv'

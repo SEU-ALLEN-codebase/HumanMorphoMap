@@ -109,18 +109,18 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             plt.figure(figsize=(8,8))
             # plot the median evoluation
             df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
-            median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
+            median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
             median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
             median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
             # save for subsequent analysis
             median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
             
             # remove low-count bins, to avoid randomness
-            median_data = median_data[median_data['count'] > 30]
+            median_data = median_data[median_data['count'] > 50]
 
             g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
                         scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                        line_kws={'color':'red', 'alpha':0.5, 'linewidth':5})#, lowess=True)
+                        line_kws={'color':'red', 'alpha':0.5, 'linewidth':5}, lowess=True)
 
 
             p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
@@ -150,8 +150,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'nonpyramidal'
-    overall_distribution = True
+    cell_type = 'pyramidal'
+    overall_distribution = False
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
@@ -169,7 +169,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     if os.path.exists(relation_file):
         df = pd.read_csv(relation_file)
         prefix = ''
-        _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}', overall_distribution=overall_distribution)
+        _plot(df, num=25, zoom=False, figname=f'{relation_file[:-4]}', overall_distribution=overall_distribution)
         sys.exit()
 
 
@@ -192,6 +192,10 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     if cell_type is not None:
         # extract only pyramdial cells
         ctypes = pd.read_csv(cell_type_file, index_col=0)
+        # extract only cell types in [0,1,2], and convert them to integer to be compatible with previous implementation
+        ctypes = ctypes[ctypes.CLS2 != '-']
+        ctypes['CLS2'] = ctypes['CLS2'].astype(int)
+
         # pyramidal cells
         ctypes_pyramidal = ctypes[(ctypes.CLS2 == CELL_DICT[cell_type]) & (ctypes.num_annotator > 1)]
         id_ctypes = ctypes_pyramidal.index.to_series().apply(lambda x: int(x.split('_')[0]))
@@ -360,22 +364,20 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     df = pd.DataFrame(np.vstack((dists_all, fdists_all)).transpose(), columns=('euclidean_distance', 'feature_distance'))
     df.to_csv(relation_file)
     print(f'Total pairs: {df.shape[0]}')
-    #_plot(df, num=30, zoom=True, figname=f'{relation_file[:-4]}_zoom')
-    _plot(df, num=30, zoom=False, figname=f'{relation_file[:-4]}')
 
 
 if __name__ == '__main__':
     meta_file_neuron = '../meta/1-50114.xlsx.csv'
-    gf_file = '/data/kfchen/trace_ws/cropped_swc/proposed_1um_l_measure_total.csv'
-    somalist_dir = '../meta/PTRSB_Somas/'
+    gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
     ihc = 2 # 0,1,2(all type)
 
     if 0:
+        somalist_dir = '../meta/PTRSB_Somas/'
         distance_vs_similarity(meta_file_neuron, gf_file, somalist_dir=somalist_dir, ihc=ihc)
 
     if 1: 
         image_dir = '/human402/Human_Single_Imaging_Raw_Data/Manual_cell_data/After_20220715'
-        cell_type_file = '../meta/cell_type_annot_rating_cls2_yufeng_unique.csv'
+        cell_type_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
         find_coordinates(image_dir, meta_file_neuron, gf_file, cell_type_file, ihc=0)
     
     

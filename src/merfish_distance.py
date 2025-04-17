@@ -61,13 +61,13 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         plt.figure(figsize=(8,8))
         #sns.scatterplot(df_sample, x='euclidean_distance', y='feature_distance', s=2, alpha=0.75, color='gray')
         df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num), right=False)
-        median_data = df.groupby('A_bin')['feature_distance'].mean().reset_index()
+        median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
         median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
         median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
         # save for subsequent analysis
         median_data.to_csv(f'{figname}_mean.csv', float_format='%.3f')
         median_data = median_data[~median_data.feature_distance.isna()]
-        median_data = median_data[median_data['count'] > 30]
+        median_data = median_data[median_data['count'] > 50]
 
         #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
         g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
@@ -135,19 +135,21 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
                            columns=('euclidean_distance', 'feature_distance'))
 
         figname = f'{ctype}_merfish_{region}'
-        _plot(dff, num=30, zoom=False, figname=figname)
+        _plot(dff, num=25, zoom=False, figname=figname)
 
         #import ipdb; ipdb.set_trace()
         print()
 
 
 if __name__ == '__main__':
-    region = 'MTG'
-    #merfish_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.matrix.csv'
-    #gene_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.genes.csv'
-    #feat_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.features.csv'
-    merfish_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.matrix.csv'
-    gene_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.genes.csv'
-    feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
+    region = 'STG'
+    if region == 'STG':
+        merfish_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.matrix.csv'
+        gene_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.genes.csv'
+        feat_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.features.csv'
+    elif region == 'MTG':
+        merfish_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.matrix.csv'
+        gene_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.genes.csv'
+        feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
     merfish_vs_distance(merfish_file, gene_file, feat_file, region=region)
 

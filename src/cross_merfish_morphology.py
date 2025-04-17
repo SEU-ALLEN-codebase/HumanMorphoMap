@@ -18,7 +18,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     df = dfmer.merge(dfmor, how='inner', on='A_bin_start')
     df = df[~(df['feature_distance_x'].isna() | df['feature_distance_y'].isna())]
     # filter by counts
-    df = df[(df['count_x'] > 30) & (df['count_y'] > 18)]
+    df = df[(df['count_x'] > 50) & (df['count_y'] > 50)]
 
     # smoothing
     df['smoothed_y'] = ndimage.convolve1d(df['feature_distance_y'], np.ones(3)/3., mode='reflect')
@@ -41,6 +41,12 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     print(f'{slope:.3f}, {intercept:.3f}, {r_value:.3f}, {p_value:.3g}, {std_err:.3f}')
     #p_pearson = pearsonr(df['feature_distance_x'], df['smoothed_y'])
     #print(f'Pearson CC: {p_pearson.statistic:.3f}')
+
+    if cell_type == 'exc':
+        # estimate the linear region
+        df_part = df[df['feature_distance_x'] < 8]
+        slope2, intercept2, r_value2, p_value2, std_err2 = linregress(df_part['feature_distance_x'], df_part[ycol])
+        print(f'{slope2:.3f}, {intercept2:.3f}, {r_value2:.3f}, {p_value2:.3g}, {std_err2:.3f}')
     
     plt.xlabel('Transcriptomic distance')
     plt.ylabel('Morphological distance')
