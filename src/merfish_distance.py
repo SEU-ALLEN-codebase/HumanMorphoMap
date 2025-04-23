@@ -50,10 +50,10 @@ def process_merfish(cgm):
     return fpca, filtered
     
 
-def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
+def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
 
     # helper functions
-    def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000):
+    def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range=True):
         df = dff.copy()
         if df.shape[0] > nsample:
             df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
@@ -84,9 +84,11 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         print(f'Slope: {slope:.4f}')
 
         plt.xlim(0, 5.)
-        delta = 2.5
-        ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
-        plt.ylim(ym-delta/2, ym+delta/2)
+
+        if restrict_range:
+            delta = 2.5
+            ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+            plt.ylim(ym-delta/2, ym+delta/2)
 
         plt.xlabel('Soma-soma distance (mm)')
         plt.ylabel('Transcriptomic distance')
@@ -121,10 +123,18 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
     xy = df_f.loc[df_pca.index, ['adjusted.x', 'adjusted.y']]
     # estimate the relationship for pyramidal cells and non-pyramidal cells
     #ctypes = df_f.loc[df_pca.index, 'cluster_L1'].apply(lambda x: 'EXC' if x=='EXC' else 'INH')
-    ctypes = df_f.loc[df_pca.index, 'cluster_L1']
-    
+
+    if not layer:
+        ctypes = df_f.loc[df_pca.index, 'cluster_L1']
+        show_ctypes = np.unique(ctypes)
+        restrict_range = True
+    else:
+        ctypes = df_f.loc[df_pca.index, 'cluster_L2']
+        show_ctypes = ['eL2/3.IT', 'eL4/5.IT', 'eL5.IT', 'eL6.IT', 'eL6.CT', 'eL6.CAR3', 'eL6.b']
+        restrict_range = False
+
     sns.set_theme(style='ticks', font_scale=2.2)
-    for ctype in np.unique(ctypes):
+    for ctype in show_ctypes:
         print(ctype)
         ct_mask = ctypes == ctype
         xy_cur = xy[ct_mask]
@@ -136,8 +146,9 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         dff = pd.DataFrame(np.array([cdists, fdists]).transpose(), 
                            columns=('euclidean_distance', 'feature_distance'))
 
-        figname = f'{ctype}_merfish_{region}'
-        _plot(dff, num=25, zoom=False, figname=figname)
+        tname = ctype.replace("/", "").replace(".", "")
+        figname = f'{tname}_merfish_{region}'
+        _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range)
 
         #import ipdb; ipdb.set_trace()
         print()
@@ -150,7 +161,7 @@ def calculate_volume_and_dimension(atlas_file, id_region):
 
 
 if __name__ == '__main__':
-    region = 'STG'
+    region = 'MTG'
     if region == 'STG':
         merfish_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.matrix.csv'
         gene_file = f'../resources/human_merfish/H19/H19.30.001.{region}.250.expand.rep1.genes.csv'
@@ -159,9 +170,11 @@ if __name__ == '__main__':
         merfish_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.matrix.csv'
         gene_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.genes.csv'
         feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
-    #merfish_vs_distance(merfish_file, gene_file, feat_file, region=region)
 
-    if 1:
+    layer = True
+    merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer)
+
+    if 0:
         atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'
         id_mapper = {
             'MTG': 28,
