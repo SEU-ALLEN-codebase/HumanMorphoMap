@@ -13,6 +13,8 @@ from scipy.stats import spearmanr, pearsonr, linregress
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from file_io import load_image
+
 def process_merfish(cgm):
     # remove low-expression cells
     gcounts = cgm.sum(axis=1)
@@ -140,6 +142,12 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region):
         #import ipdb; ipdb.set_trace()
         print()
 
+def calculate_volume_and_dimension(atlas_file, id_region):
+    # load the image
+    atlas = load_image(atlas_file)
+    import ipdb; ipdb.set_trace()
+    print()
+
 
 if __name__ == '__main__':
     region = 'STG'
@@ -151,5 +159,13 @@ if __name__ == '__main__':
         merfish_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.matrix.csv'
         gene_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.genes.csv'
         feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
-    merfish_vs_distance(merfish_file, gene_file, feat_file, region=region)
+    #merfish_vs_distance(merfish_file, gene_file, feat_file, region=region)
 
+    if 1:
+        atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'
+        id_mapper = {
+            'MTG': 28,
+            'STG': 45,
+        }
+        id_region = id_mapper[region]
+        calculate_volume_and_dimension(atlas_file, id_region)

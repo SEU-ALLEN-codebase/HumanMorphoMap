@@ -28,7 +28,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         elif p < 0.01: return '**'
         elif p < 0.05: return '*'
         elif p < 0.1: return '†'  # 趋势性标记
-        else: return 'ns'
+        else: return 'n.s.'
 
     def _plot(gfs_cur, figname):
         sns.set_theme(style='ticks', font_scale=1.8)
