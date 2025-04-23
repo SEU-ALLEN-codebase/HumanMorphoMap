@@ -13,6 +13,15 @@ from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr, linregress
 from ml.feature_processing import standardize_features
 
+
+__CREGS__ = ('ACAd', 'ACAv', 'AId', 'AIp', 'AIv',
+       'AUDd', 'AUDp', 'AUDpo', 'AUDv', 'ECT', 
+       'FRP', 'MOp', 'MOs', 'ORBl', 'ORBm', 'ORBvl', 
+       'RSPagl', 'RSPd', 'RSPv', 'SSp',
+       'SSp-bfd', 'SSp-ll', 'SSp-m', 'SSp-n', 'SSp-tr', 'SSp-ul',
+       'SSp-un', 'SSs', 'TEa', 'VISC', 'VISa',
+       'VISal', 'VISam', 'VISl', 'VISli', 'VISp', 'VISpm', 'VISpor', 'VISrl')
+
 # helper functions
 def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     df = dff.copy()
@@ -78,23 +87,34 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
     print()
 
-def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp', subset=False):
-    cregs = ('ACAd', 'ACAv', 'AId', 'AIp', 'AIv',
-       'AUDd', 'AUDp', 'AUDpo', 'AUDv', 'ECT', 
-       'FRP', 'MOp', 'MOs', 'ORBl', 'ORBm', 'ORBvl', 
-       'RSPagl', 'RSPd', 'RSPv', 'SSp',
-       'SSp-bfd', 'SSp-ll', 'SSp-m', 'SSp-n', 'SSp-tr', 'SSp-ul',
-       'SSp-un', 'SSs', 'TEa', 'VISC', 'VISa',
-       'VISal', 'VISam', 'VISl', 'VISli', 'VISp', 'VISpm', 'VISpor', 'VISrl')
+def estimate_cortical_relations(feat_file, meta_file, py_file, region=None, layer=None, figname='temp', subset=False):
     df = pd.read_csv(feat_file, index_col=0)
-    spos = pd.read_csv(spos_file, index_col=0)
-    sreg = pd.read_csv(sreg_file, index_col=0)
+    meta = pd.read_csv(meta_file, index_col=0)
 
-    df = df[df.index.isin(sreg.index)]
+    df = df[df.index.isin(meta.index)]
     # keep only isocortical neurons
-    isoc = df[sreg.loc[df.index].isin(cregs).values[:,0]]
+    if (layer is None) and (region is not None):
+        cregs = (region,)
+        figname = f'{figname}_{region}'
+    else:
+        cregs = __CREGS__
+        figname = f'{figname}_allRegions'
+
+    isoc = df[meta.loc[df.index, 'Soma region'].isin(cregs).values]
     # normalize the features
     standardize_features(isoc, isoc.columns, inplace=True)
+    # keep only pyramidal file
+    with open(py_file) as fp:
+        py_names = [line.strip() for line in fp.readlines()]
+
+    isoc = isoc[isoc.index.isin(py_names)]
+    # get the layers
+    if layer is not None:
+        layers = meta.loc[isoc.index, 'Cortical Lamination of soma']
+        isoc = isoc[layers == layer]
+        figname = f'{figname}_{layer.replace("/", "")}'
+    else:
+        figname = f'{figname}_allLayers'
     
     if subset:
         # use subset of features
@@ -104,7 +124,8 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp',
     # distance
     fdists = pdist(isoc)
     # 
-    tmp_spos = spos.loc[isoc.index] / 1000. # to mm
+    tmp_spos = meta.loc[isoc.index, ['Soma_X(CCFv3_1𝜇𝑚)', 'Soma_Y(CCFv3_1𝜇𝑚)', 'Soma_Z(CCFv3_1𝜇𝑚)']] / 1000. # to mm
+    #tmp_spos = spos.loc[isoc.index] / 1000. # to mm
     edists = pdist(tmp_spos)
 
     dff = pd.DataFrame(np.array([edists, fdists]).transpose(), columns=('euclidean_distance', 'feature_distance'))
@@ -115,9 +136,11 @@ def estimate_cortical_relations(feat_file, spos_file, sreg_file, figname='temp',
 
 
 if __name__ == '__main__':
-    ntype = 'final'
+    ntype = 'dendrite'
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
-    spos_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1891_soma_pos.csv'
-    sreg_file = '/home/lyf/Research/publication/parcellation/BrainParcellation/evaluation/data/1876_soma_region.csv'
-    estimate_cortical_relations(feat_file, spos_file, sreg_file, figname=f'euc_feat_mouse_{ntype}', subset=False)
+    meta_file = './data/TableS6_Full_morphometry_1222.csv'
+    py_file = './data/apical_1886_v20231211.txt'
+    region = 'SSp-bfd'
+    layer = 'L4'
+    estimate_cortical_relations(feat_file, meta_file, py_file, region=region, layer=layer, figname=f'euc_feat_mouse_{ntype}', subset=False)
 
