@@ -38,19 +38,6 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     #                line_kws={'color':'red', 'alpha':0.75, 'linewidth':3},
     #                lowess=True)
 
-    '''   
-    ax_scatter = sns.scatterplot(
-        df_sample, 
-        x='euclidean_distance', 
-        y='feature_distance', 
-        s=2, 
-        alpha=0.3,
-        color='black',
-        edgecolor='none',
-        rasterized=True
-    )
-    '''
-
     df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, max_dist+0.001, num), right=False)
     median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
     median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
