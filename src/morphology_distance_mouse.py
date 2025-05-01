@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from scipy.spatial.distance import pdist
-from scipy.stats import spearmanr, linregress
+from scipy.stats import spearmanr, pearsonr, linregress
 from ml.feature_processing import standardize_features
 
 
@@ -33,34 +33,54 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
         df_sample = df
  
     plt.figure(figsize=(8,8))
-    #g = sns.regplot(x='euclidean_distance', y='feature_distance', data=df_sample,
-    #                scatter_kws={'s':4, 'alpha':0.5, 'color':'black'},
-    #                line_kws={'color':'red', 'alpha':0.75, 'linewidth':3},
-    #                lowess=True)
 
-    df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, max_dist+0.001, num), right=False)
-    median_data = df.groupby('A_bin')['feature_distance'].median().reset_index()
-    median_data['A_bin_start'] = median_data['A_bin'].apply(lambda x: (x.left+x.right)/2.)
-    median_data['count'] = df.groupby('A_bin').count()['euclidean_distance'].values
-    # remove low-count bins, to avoid randomness
-    median_data = median_data[median_data['count'] > 30]
+    # 创建分箱并计算统计量
+    num_bins = num  # 假设num是之前定义的bins数量
+    df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, max_dist + 0.001, num_bins), right=False)
 
-    #sns.lineplot(x='A_bin_start', y='feature_distance', data=median_data, marker='o', color='r')
-    g = sns.regplot(x='A_bin_start', y='feature_distance', data=median_data,
-                    scatter_kws={'s':100, 'alpha':0.75, 'color':'black'},
-                    line_kws={'color':'red', 'alpha':0.5, 'linewidth':5},
-                    lowess=True)
+    # 计算每个bin的统计量（包括区间中点）
+    bin_stats = df.groupby('A_bin')['feature_distance'].agg(['median', 'sem', 'count'])
+    bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
+    bin_stats = bin_stats[bin_stats['count'] > 30]  # 过滤低计数区间
+    bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
-    p_spearman = spearmanr(median_data['A_bin_start'], median_data['feature_distance'], alternative='greater')
-    print(f'Spearman coefficient: {p_spearman.statistic:.3f}')
-    slope, intercept, r_value, p_value, std_err = linregress(median_data['A_bin_start'], median_data['feature_distance'])
-    print(f'Slope, R_pearson, and p-value: {slope:.3f}, {r_value:.3f}, {p_value}')
-    
+    # 绘图：点图+误差条（使用实际数值坐标）
+    plt.errorbar(x=bin_stats['bin_center'],
+                 y=bin_stats['median'],
+                 yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+                 fmt='o',
+                 markersize=12,
+                 color='black',
+                 ecolor='gray',
+                 elinewidth=3,
+                 capsize=7,
+                 capthick=3)
 
-    plt.xlim(0, max_dist)#; plt.ylim(4,6)
+    # 添加趋势线（与统计分析一致）
+    sns.regplot(x='bin_center', y='median', data=bin_stats,
+                scatter=False,
+                line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
+                lowess=True)
+
+    # 统计分析（使用与实际坐标一致的数据）
+    p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['median'], alternative='greater')
+    p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['median'])
+    print(f'Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
+
+    slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['median'])
+    print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
+
+    # 设置坐标轴范围
+    plt.xlim(0, 5)
+    # Adjust plot limits
+    bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
     delta = 2.5
-    ym = (median_data['feature_distance'].min() + median_data['feature_distance'].max())/2.
+    ym = (bin_stats['median'].min() + bin_stats['median'].max())/2.
     plt.ylim(ym-delta/2, ym+delta/2)
+
+    # 优化坐标轴标签
+    plt.xlabel('Euclidean Distance')
+    plt.ylabel('Feature Distance (median ± 95% CI)')
 
     plt.xlabel('Soma-soma distance (mm)')
     plt.ylabel('Morphological distance')
@@ -127,7 +147,7 @@ if __name__ == '__main__':
     feat_file = f'/home/lyf/Research/publication/parcellation/BrainParcellation/microenviron/data/gf_S3_2um_{ntype}.csv'
     meta_file = './data/TableS6_Full_morphometry_1222.csv'
     py_file = './data/apical_1886_v20231211.txt'
-    region = 'SSp-bfd'
-    layer = 'L4'
+    region = None #'SSp-bfd'
+    layer = 'L2/3'
     estimate_cortical_relations(feat_file, meta_file, py_file, region=region, layer=layer, figname=f'euc_feat_mouse_{ntype}', subset=False)
 

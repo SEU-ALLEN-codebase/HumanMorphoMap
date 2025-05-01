@@ -152,10 +152,6 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             ym = (bin_stats['median'].min() + bin_stats['median'].max())/2.
             plt.ylim(ym-delta/2, ym+delta/2)
 
-            # 优化坐标轴标签
-            plt.xlabel('Euclidean Distance')
-            plt.ylabel('Feature Distance (median ± 95% CI)')
-
             # 添加分箱参考线（可选）
             #for edge in np.linspace(0, 5, num_bins+1):
             #    plt.axvline(edge, color='gray', linestyle=':', alpha=0.3)
