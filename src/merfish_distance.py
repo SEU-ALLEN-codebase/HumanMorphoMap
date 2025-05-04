@@ -15,6 +15,8 @@ import seaborn as sns
 
 from file_io import load_image
 
+__COLORS4__ = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
 def process_merfish(cgm):
     # remove low-expression cells
     gcounts = cgm.sum(axis=1)
@@ -85,15 +87,15 @@ def estimate_principal_axes(feat_file, cell_name='eL4/5.IT', visualize=True):
     if visualize:
         # 4. 可视化
         sns.set_theme(style='ticks', font_scale=1.7)
-        plt.figure(figsize=(8, 6))
-        plt.scatter(points[:, 0], points[:, 1], s=4, alpha=0.3, label='Cells (mm)')
+        plt.figure(figsize=(8, 8))
+        plt.scatter(points[:, 0], points[:, 1], s=4, alpha=0.5, label='Cells (mm)')
         plt.plot(primary_line[:, 0], primary_line[:, 1], 'r-', linewidth=2, label='Primary Axis')
         plt.plot(secondary_line[:, 0], secondary_line[:, 1], 'b-', linewidth=2, label='Secondary Axis')
         plt.scatter(center[0], center[1], c='black', s=50, marker='^', label='Center')
         plt.legend(markerscale=1.5, frameon=False)
         plt.title('PCA-based Linear Axes (mm scale)')
-        plt.xlabel('adjusted.x (mm)')
-        plt.ylabel('adjusted.y (mm)')
+        plt.xlabel('X coordinates (mm)')
+        plt.ylabel('Y coordinates (mm)')
         plt.axis('equal')  # 保持坐标轴比例一致
         tname = cell_name.replace("/", "").replace(".", "")
         plt.savefig(f'principal_axes_{tname}.png', dpi=300)
@@ -106,7 +108,7 @@ def estimate_principal_axes(feat_file, cell_name='eL4/5.IT', visualize=True):
     return primary_axis, secondary_axis, center
 
 
-def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range=True):
+def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range=True, color='black'):
     df = dff.copy()
     if df.shape[0] > nsample:
         df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
@@ -138,7 +140,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
                  capthick=3)
 
     # 添加趋势线（与统计分析一致）
-    sns.regplot(x='bin_center', y='median', data=bin_stats,
+    sns.regplot(x='bin_center', y='median', data=bin_stats, color=color,
                 scatter=False,
                 line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
                 lowess=True)
@@ -219,7 +221,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range)
 
 
-def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True):
+def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True, cell_name='eL2/3.IT'):
     """
     按pc2方向的分位数将点分为4组
     输入:
@@ -245,20 +247,21 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25
         '75-100%': (xy_cur[proj > q[2]], fpca_cur[proj > q[2]])
     }
 
-    sns.set_theme(style="ticks", font_scale=1.5)
+    sns.set_theme(style="ticks", font_scale=1.7)
 
     if visualize:
-        plt.figure(figsize=(8, 6))
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+        plt.figure(figsize=(8, 8))
+        colors = __COLORS4__
         for i, (name, pts) in enumerate(groups.items()):
-            pts_v = pts[0].values
-            plt.scatter(pts_v[:,0], pts_v[:,1], s=5, alpha=0.6, label=name, color=colors[i])
+            pts_v = pts[0].values / 1000.
+            plt.scatter(pts_v[:,0], pts_v[:,1], s=8, alpha=0.6, label=name, color=colors[i])
 
-        plt.legend(frameon=False, markerscale=3)
-        plt.xlabel('adjusted.x (mm)')
-        plt.ylabel('adjusted.y (mm)')
+        plt.legend(frameon=False, markerscale=2)
+        plt.xlabel('X coordinates (mm)')
+        plt.ylabel('Y coordinates (mm)')
         sns.despine()
-        plt.savefig(f'sublayers_pc{pc_id}.png', dpi=300)
+        tname = cell_name.replace("/", "").replace(".", "")
+        plt.savefig(f'sublayers_pc{pc_id}_{tname}.png', dpi=300)
         plt.close()
 
     return groups
@@ -280,7 +283,6 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     fpca, df_pca = process_merfish(cgm)
     # get the coordinates
     xy = df_f.loc[df_pca.index, ['adjusted.x', 'adjusted.y']]
-    
 
     ctypes = df_f.loc[df_pca.index, 'cluster_L2']
     ctype = 'eL2/3.IT'
@@ -296,11 +298,12 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     
     # get sublayers by percentiles
     pc_id = 0
-    groups = split_by_pc2_quantiles(xy_cur, fpca_cur, (pc1, pc2), pc_id, center)
+    groups = split_by_pc2_quantiles(xy_cur, fpca_cur, (pc1, pc2), pc_id, center, cell_name=ctype)
     # 检查每组点数
     for name, pts in groups.items():
         print(f"{name}: {len(pts[0])} points")
     
+    icur = 0
     for name, (xy_cur_i,fpca_cur_i) in groups.items():
         # pairwise distance and similarity
         fdists = pdist(fpca_cur_i)
@@ -309,10 +312,9 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
                            columns=('euclidean_distance', 'feature_distance'))
 
         figname_cur = f'{figname}_pc{pc_id}_{name.replace("%", "percentile")}'
-        _plot(dff, num=25, zoom=False, figname=figname_cur, restrict_range=restrict_range)
+        _plot(dff, num=25, zoom=False, figname=figname_cur, restrict_range=restrict_range, color=__COLORS4__[icur])
 
-        #import ipdb; ipdb.set_trace()
-        print()
+        icur += 1
 
 
 
