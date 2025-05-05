@@ -94,12 +94,13 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         df = dff.copy()
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
         
+        xn, yn = 'euclidean_distance', 'feature_distance' 
         if overall_distribution:
             sns.set_theme(style='ticks', font_scale=1.6)
             plt.figure(figsize=(8,8))
-            sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
-                            alpha=0.3, edgecolor='none', rasterized=True, color='black')
-            sns.displot(df, x='euclidean_distance', y='feature_distance', cmap='pink_r')
+            #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
+            #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
+            sns.displot(df, x=xn, y=yn, cmap='Reds')
             figname = figname + '_overall'
 
             plt.xlim(0, 5)
@@ -110,17 +111,17 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
             # 创建分箱并计算统计量
             num_bins = num  # 假设num是之前定义的bins数量
-            df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num_bins), right=False)
+            df['A_bin'] = pd.cut(df[xn], bins=np.linspace(0, 5.001, num_bins), right=False)
 
             # 计算每个bin的统计量（包括区间中点）
-            bin_stats = df.groupby('A_bin')['feature_distance'].agg(['median', 'sem', 'count'])
+            bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
             bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
             bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
             bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
             # 绘图：点图+误差条（使用实际数值坐标）
             plt.errorbar(x=bin_stats['bin_center'], 
-                         y=bin_stats['median'],
+                         y=bin_stats['mean'],
                          yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
                          fmt='o',
                          markersize=12,
@@ -131,17 +132,17 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
                          capthick=3)
 
             # 添加趋势线（与统计分析一致）
-            sns.regplot(x='bin_center', y='median', data=bin_stats,
+            sns.regplot(x='bin_center', y='mean', data=bin_stats,
                         scatter=False,
                         line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
                         lowess=True)
 
             # 统计分析（使用与实际坐标一致的数据）
-            p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['median'], alternative='greater')
-            p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['median'])
+            p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['mean'], alternative='greater')
+            p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['mean'])
             print(f'Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
 
-            slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['median'])
+            slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['mean'])
             print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
 
             # 设置坐标轴范围
@@ -149,7 +150,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             # Adjust plot limits
             bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
             delta = 2.5
-            ym = (bin_stats['median'].min() + bin_stats['median'].max())/2.
+            ym = (bin_stats['mean'].min() + bin_stats['mean'].max())/2.
             plt.ylim(ym-delta/2, ym+delta/2)
 
             # 添加分箱参考线（可选）
@@ -158,7 +159,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
                     
         plt.xlabel('Soma-soma distance (mm)')   
-        plt.ylabel('Morphological distance')
+        plt.ylabel('Morphology dissimilarity')
         ax = plt.gca()
         ax.spines['left'].set_linewidth(2)
         ax.spines['bottom'].set_linewidth(2)
@@ -171,7 +172,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
 
     cell_type = 'nonpyramidal'
-    overall_distribution = False
+    overall_distribution = True
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':

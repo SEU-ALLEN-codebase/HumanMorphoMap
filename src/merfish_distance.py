@@ -11,11 +11,17 @@ from sklearn.decomposition import PCA
 from scipy.spatial.distance import pdist
 from scipy.stats import spearmanr, pearsonr, linregress
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import seaborn as sns
 
 from file_io import load_image
 
 __COLORS4__ = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
+
+
+def hex_to_rgba(hex_color, alpha):
+    hex_color = hex_color.lstrip('#')  # 移除开头的 '#'
+    return tuple([int(hex_color[i:i+2], 16)/255. for i in (0, 2, 4)] + [alpha])  # 每两位解析为十进制
 
 def process_merfish(cgm):
     # remove low-expression cells
@@ -108,63 +114,75 @@ def estimate_principal_axes(feat_file, cell_name='eL4/5.IT', visualize=True):
     return primary_axis, secondary_axis, center
 
 
-def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range=True, color='black'):
+def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range=True, color='black', overall_distribution=False):
     df = dff.copy()
     if df.shape[0] > nsample:
         df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
     else:
         df_sample = df
     
-    plt.figure(figsize=(8,8))
-    
-    # 创建分箱并计算统计量
-    num_bins = num  # 假设num是之前定义的bins数量
-    df['A_bin'] = pd.cut(df['euclidean_distance'], bins=np.linspace(0, 5.001, num_bins), right=False)
+    xn, yn = 'euclidean_distance', 'feature_distance'
+    if overall_distribution:
+            sns.set_theme(style='ticks', font_scale=1.6)
+            plt.figure(figsize=(8,8))
+            #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5,
+            #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
+            sns.displot(df, x=xn, y=yn, cmap='Reds')
+            figname = figname + '_overall'
 
-    # 计算每个bin的统计量（包括区间中点）
-    bin_stats = df.groupby('A_bin')['feature_distance'].agg(['median', 'sem', 'count'])
-    bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
-    bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
-    bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+            plt.xlim(0, 5)
+    else:
+        sns.set_theme(style='ticks', font_scale=2.2)
+        plt.figure(figsize=(8,8))
+        
+        # 创建分箱并计算统计量
+        num_bins = num  # 假设num是之前定义的bins数量
+        df['A_bin'] = pd.cut(df[xn], bins=np.linspace(0, 5.001, num_bins), right=False)
 
-    # 绘图：点图+误差条（使用实际数值坐标）
-    plt.errorbar(x=bin_stats['bin_center'],
-                 y=bin_stats['median'],
-                 yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
-                 fmt='o',
-                 markersize=12,
-                 color='black',
-                 ecolor='gray',
-                 elinewidth=3,
-                 capsize=7,
-                 capthick=3)
+        # 计算每个bin的统计量（包括区间中点）
+        bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
+        bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
+        bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
+        bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
-    # 添加趋势线（与统计分析一致）
-    sns.regplot(x='bin_center', y='median', data=bin_stats, color=color,
-                scatter=False,
-                line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
-                lowess=True)
+        # 绘图：点图+误差条（使用实际数值坐标）
+        plt.errorbar(x=bin_stats['bin_center'],
+                     y=bin_stats['mean'],
+                     yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+                     fmt='o',
+                     markersize=12,
+                     color='black',
+                     ecolor='gray',
+                     elinewidth=3,
+                     capsize=7,
+                     capthick=3)
 
-    # 统计分析（使用与实际坐标一致的数据）
-    p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['median'], alternative='greater')
-    p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['median'])
-    print(f'Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
+        # 添加趋势线（与统计分析一致）
+        sns.regplot(x='bin_center', y='mean', data=bin_stats, color=color,
+                    scatter=False,
+                    line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
+                    lowess=True)
 
-    slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['median'])
-    print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
+        # 统计分析（使用与实际坐标一致的数据）
+        p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['mean'], alternative='greater')
+        p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
 
-    # 设置坐标轴范围
-    plt.xlim(0, 5)
-    # Adjust plot limits
-    bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
+        slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
 
-    if restrict_range:
-        delta = 2.5
-        ym = (bin_stats['median'].min() + bin_stats['median'].max())/2.
-        plt.ylim(ym-delta/2, ym+delta/2)
+        # 设置坐标轴范围
+        plt.xlim(0, 5)
+        # Adjust plot limits
+        bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
+
+        if restrict_range:
+            delta = 2.5
+            ym = (bin_stats['mean'].min() + bin_stats['mean'].max())/2.
+            plt.ylim(ym-delta/2, ym+delta/2)
 
     plt.xlabel('Soma-soma distance (mm)')
-    plt.ylabel('Transcriptomic distance')
+    plt.ylabel('Transcriptomic dissimilarity')
     ax = plt.gca()
     ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_linewidth(2)
@@ -174,6 +192,99 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
     plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
     print()
+
+
+def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_range=True):
+    """
+    将所有分组的子图合并到同一个图中
+    输入:
+        dff_groups: 字典，key为分组名，value为对应的DataFrame
+        num: 分箱数量
+        figname: 输出文件名前缀
+        restrict_range: 是否限制y轴范围
+    """
+    sns.set_theme(style='ticks', font_scale=2.1)
+    plt.figure(figsize=(8, 8))
+
+    xn, yn = 'euclidean_distance', 'feature_distance'
+    
+    # 为每个分组绘制图形
+    for icur, (name, dff) in enumerate(dff_groups.items()):
+        df = dff.copy()
+        
+        # 创建分箱并计算统计量
+        df['A_bin'] = pd.cut(df[xn], bins=np.linspace(0, 5.001, num), right=False)
+        
+        # 计算每个bin的统计量
+        bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
+        bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
+        bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
+        
+        # 为当前分组选择颜色
+        color = __COLORS4__[icur] if '__COLORS4__' in globals() else f'C{icur}'
+        
+        # 绘制当前分组的点图和误差条
+        errorbar_alpha = 0.5
+        errorbar = plt.errorbar(x=bin_stats['bin_center'],
+                     y=bin_stats['mean'],
+                     yerr=bin_stats['sem'],
+                     fmt='o',
+                     markersize=10,
+                     color=color,
+                     ecolor=hex_to_rgba(color, errorbar_alpha),
+                     elinewidth=2,
+                     capsize=5,
+                     capthick=2,
+                     label=name)
+        # 单独设置caps的透明度
+        for cap in errorbar[1]:  # errorbar[1]对应caps的Line2D对象
+            cap.set_alpha(errorbar_alpha)   # 设置alpha值
+        
+        # 添加趋势线
+        sns.regplot(x='bin_center', y='mean', data=bin_stats, color=color,
+                    scatter=False,
+                    line_kws={'linewidth':2, 'alpha':0.7},
+                    lowess=True)
+        
+        # 打印统计信息
+        p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['mean'], alternative='greater')
+        p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'{name} - Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
+        
+        slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'{name} - Slope: {slope:.4f}, p-value: {p_value:.4g}\n')
+    
+    # 设置图形样式
+    plt.xlim(0, 5)
+    if restrict_range:
+        # 计算所有分组的共同y轴范围
+        all_medians = []
+        for dff in dff_groups.values():
+            df = dff.copy()
+            df['A_bin'] = pd.cut(df[xn], bins=np.linspace(0, 5.001, num), right=False)
+            bin_stats = df.groupby('A_bin')[yn].agg(['mean'])
+            all_medians.extend(bin_stats['mean'].values)
+        
+        if all_medians:
+            delta = 2.5
+            ym = (min(all_medians) + max(all_medians))/2.
+            plt.ylim(ym-delta/2, ym+delta/2)
+    
+    # 设置坐标轴和标签
+    plt.xlabel('Soma-soma distance (mm)')
+    plt.ylabel('Transcriptomic dissimilarity')
+    plt.legend(frameon=False, markerscale=1.6)
+    
+    # 设置边框和刻度
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_linewidth(2)
+    ax.tick_params(width=2)
+    
+    plt.subplots_adjust(bottom=0.12, left=0.12)
+    plt.savefig(f'{figname}.png', dpi=300)
+    plt.close()
+
 
 def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
     df_g = pd.read_csv(gene_file)
@@ -202,7 +313,6 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         show_ctypes = ['eL2/3.IT', 'eL4/5.IT', 'eL5.IT', 'eL6.IT', 'eL6.CT', 'eL6.CAR3', 'eL6.b']
         restrict_range = False
 
-    sns.set_theme(style='ticks', font_scale=2.2)
     for ctype in show_ctypes:
         ct_mask = ctypes == ctype
         tname = ctype.replace("/", "").replace(".", "")
@@ -218,7 +328,8 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         dff = pd.DataFrame(np.array([cdists, fdists]).transpose(), 
                            columns=('euclidean_distance', 'feature_distance'))
 
-        _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range)
+        overall_distribution = True
+        _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range, overall_distribution=overall_distribution)
 
 
 def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True, cell_name='eL2/3.IT'):
@@ -247,16 +358,19 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25
         '75-100%': (xy_cur[proj > q[2]], fpca_cur[proj > q[2]])
     }
 
-    sns.set_theme(style="ticks", font_scale=1.7)
+    sns.set_theme(style="ticks", font_scale=2.1)
 
     if visualize:
         plt.figure(figsize=(8, 8))
         colors = __COLORS4__
         for i, (name, pts) in enumerate(groups.items()):
             pts_v = pts[0].values / 1000.
-            plt.scatter(pts_v[:,0], pts_v[:,1], s=8, alpha=0.6, label=name, color=colors[i])
+            plt.scatter(pts_v[:,0], pts_v[:,1], s=10, alpha=0.6, label=name, color=colors[i])
 
-        plt.legend(frameon=False, markerscale=2)
+        plt.legend(frameon=False, markerscale=2.5)
+        ax = plt.gca()
+        ax.yaxis.set_major_locator(MultipleLocator(1))  # 每隔1单位显示一个刻度
+        ax.xaxis.set_major_locator(MultipleLocator(1))  # 每隔2单位显示一个刻度
         plt.xlabel('X coordinates (mm)')
         plt.ylabel('Y coordinates (mm)')
         sns.despine()
@@ -286,6 +400,9 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
 
     ctypes = df_f.loc[df_pca.index, 'cluster_L2']
     ctype = 'eL2/3.IT'
+    pc_id = 1
+
+
     restrict_range = False
     pc1, pc2, center = estimate_principal_axes(df_f, cell_name='eL2/3.IT')
         
@@ -297,26 +414,23 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     fpca_cur = fpca[ct_mask]
     
     # get sublayers by percentiles
-    pc_id = 0
     groups = split_by_pc2_quantiles(xy_cur, fpca_cur, (pc1, pc2), pc_id, center, cell_name=ctype)
     # 检查每组点数
     for name, pts in groups.items():
         print(f"{name}: {len(pts[0])} points")
-    
-    icur = 0
-    for name, (xy_cur_i,fpca_cur_i) in groups.items():
-        # pairwise distance and similarity
+
+    # 使用示例
+    dff_groups = {}
+    for name, (xy_cur_i, fpca_cur_i) in groups.items():
         fdists = pdist(fpca_cur_i)
-        cdists = pdist(xy_cur_i) / 1000.0 # to mm
-        dff = pd.DataFrame(np.array([cdists, fdists]).transpose(), 
-                           columns=('euclidean_distance', 'feature_distance'))
+        cdists = pdist(xy_cur_i) / 1000.0  # to mm
+        dff_groups[name] = pd.DataFrame(np.array([cdists, fdists]).transpose(),
+                                       columns=('euclidean_distance', 'feature_distance'))
 
-        figname_cur = f'{figname}_pc{pc_id}_{name.replace("%", "percentile")}'
-        _plot(dff, num=25, zoom=False, figname=figname_cur, restrict_range=restrict_range, color=__COLORS4__[icur])
+    figname = f'{figname}_pc{pc_id}'
+    plot_combined(dff_groups, num=25, figname=figname, restrict_range=False)
 
-        icur += 1
-
-
+   
 
 if __name__ == '__main__':
     region = 'MTG'
@@ -329,9 +443,9 @@ if __name__ == '__main__':
         gene_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.genes.csv'
         feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
 
-    layer = True
-    #merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
-    merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
+    layer = False
+    merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
+    #merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
 
     if 0:
         atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'
