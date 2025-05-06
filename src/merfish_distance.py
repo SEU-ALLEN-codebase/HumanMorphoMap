@@ -218,7 +218,7 @@ def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_r
         # 计算每个bin的统计量
         bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
         bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
-        bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
+        bin_stats = bin_stats[bin_stats['count'] > 40]  # 过滤低计数区间
         
         # 为当前分组选择颜色
         color = __COLORS4__[icur] if '__COLORS4__' in globals() else f'C{icur}'
@@ -273,13 +273,24 @@ def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_r
     # 设置坐标轴和标签
     plt.xlabel('Soma-soma distance (mm)')
     plt.ylabel('Transcriptomic dissimilarity')
-    plt.legend(frameon=False, markerscale=1.6)
+    plt.legend(frameon=False, markerscale=1.6, handletextpad=0.10)
     
     # 设置边框和刻度
     ax = plt.gca()
     for spine in ax.spines.values():
         spine.set_linewidth(2)
     ax.tick_params(width=2)
+
+    ymin, ymax = ax.get_ylim()
+    if (ymax - ymin) < 4:
+        ytick_step = 0.5
+    elif (ymax - ymin) > 8:
+        ytick_step = 2
+    else:
+        ytick_step = 1
+
+    ax.yaxis.set_major_locator(MultipleLocator(ytick_step))  # 每隔1单位显示一个刻度
+    ax.xaxis.set_major_locator(MultipleLocator(1))  # 每隔2单位显示一个刻度
     
     plt.subplots_adjust(bottom=0.12, left=0.12)
     plt.savefig(f'{figname}.png', dpi=300)
@@ -332,7 +343,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range, overall_distribution=overall_distribution)
 
 
-def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True, cell_name='eL2/3.IT'):
+def split_by_pc2_quantiles(xy_cur, fpca_cur, pc, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True, cell_name='eL2/3.IT'):
     """
     按pc2方向的分位数将点分为4组
     输入:
@@ -344,7 +355,6 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25
         groups: 字典，key为分位区间名，value为对应坐标数组
     """
     # 计算每个点在pc2方向上的投影值（相对于中心点
-    pc = pcs[pc_id]
     proj = (xy_cur - center) @ pc
 
     # 计算分位点
@@ -365,15 +375,16 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25
         colors = __COLORS4__
         for i, (name, pts) in enumerate(groups.items()):
             pts_v = pts[0].values / 1000.
-            plt.scatter(pts_v[:,0], pts_v[:,1], s=10, alpha=0.6, label=name, color=colors[i])
+            plt.scatter(pts_v[:,0], pts_v[:,1], s=12, alpha=0.6, label=name, color=colors[i])
 
-        plt.legend(frameon=False, markerscale=2.5)
+        plt.legend(frameon=False, markerscale=3, handletextpad=0.10)
         ax = plt.gca()
         ax.yaxis.set_major_locator(MultipleLocator(1))  # 每隔1单位显示一个刻度
         ax.xaxis.set_major_locator(MultipleLocator(1))  # 每隔2单位显示一个刻度
         plt.xlabel('X coordinates (mm)')
         plt.ylabel('Y coordinates (mm)')
-        sns.despine()
+        #sns.despine()
+        plt.axis('off')
         tname = cell_name.replace("/", "").replace(".", "")
         plt.savefig(f'sublayers_pc{pc_id}_{tname}.png', dpi=300)
         plt.close()
@@ -381,6 +392,53 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pcs, pc_id, center, quantiles=[0.25
     return groups
 
 def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
+
+    ##################### Helper functions #######################
+    def get_subpairs(xy_cur_i, fpca_cur_i, pci, dist_th):
+        points = xy_cur_i[['adjusted.x', 'adjusted.y']].values  # 形状 (n, 2)
+        indices = xy_cur_i.index.values  # 点对应的原始索引
+
+        # --- 向量化计算 ---
+        n = len(points)
+        diff = points[:, None, :] - points[None, :, :]  # 形状 (n, n, 2)
+
+        # 欧几里得距离矩阵
+        dist_matrix = np.linalg.norm(diff, axis=2)  # 形状 (n, n)
+
+        # 沿 pci 方向的投影距离矩阵
+        proj_dist = np.abs(np.dot(diff, pci))  # 形状 (n, n)
+
+        # 筛选条件：投影距离 <= 阈值，且 i < j（避免重复和自身）
+        # 生成上三角矩阵的掩码 (i < j)
+        triu_mask = np.triu_indices(n, k=1)  # 返回 (row_indices, col_indices)
+
+        # 筛选条件：投影距离 <= 阈值，且 i < j
+        mask = np.zeros_like(proj_dist, dtype=bool)
+        mask[triu_mask] = proj_dist[triu_mask] <= dist_th
+
+        # 获取符合条件的点对索引和距离
+        rows, cols = np.where(mask)
+        valid_indices = list(zip(indices[rows], indices[cols]))
+        valid_distances = dist_matrix[rows, cols]
+
+        # distance in feature space
+        dist_feats = np.linalg.norm(fpca_cur_i[:,None,:] - fpca_cur_i[None,:,:], axis=2)
+        valid_dist_feats = dist_feats[rows, cols]
+
+        # 转换为DataFrame
+        result_df = pd.DataFrame({
+            'Index1': [pair[0] for pair in valid_indices],
+            'Index2': [pair[1] for pair in valid_indices],
+            'Distance': valid_distances,
+            'Distance_feature': valid_dist_feats,
+        })
+
+        #print(result_df)
+        return result_df
+        
+    ################## End of helper functions ###################    
+
+
     df_g = pd.read_csv(gene_file)
     df_f = pd.read_csv(feat_file)
     
@@ -401,10 +459,18 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     ctypes = df_f.loc[df_pca.index, 'cluster_L2']
     ctype = 'eL2/3.IT'
     pc_id = 1
+    dist_th = 0.3
 
 
     restrict_range = False
     pc1, pc2, center = estimate_principal_axes(df_f, cell_name='eL2/3.IT')
+
+    if pc_id == 0:
+        pci, pcj = pc1, pc2
+    elif pc_id == 1:
+        pci, pcj = pc2, pc1
+    else:
+        raise ValueError('Incorrect `pc_id` value!')
         
     sns.set_theme(style='ticks', font_scale=2.2)
     ct_mask = ctypes == ctype
@@ -414,7 +480,7 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     fpca_cur = fpca[ct_mask]
     
     # get sublayers by percentiles
-    groups = split_by_pc2_quantiles(xy_cur, fpca_cur, (pc1, pc2), pc_id, center, cell_name=ctype)
+    groups = split_by_pc2_quantiles(xy_cur, fpca_cur, pci, pc_id, center, cell_name=ctype)
     # 检查每组点数
     for name, pts in groups.items():
         print(f"{name}: {len(pts[0])} points")
@@ -422,8 +488,9 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     # 使用示例
     dff_groups = {}
     for name, (xy_cur_i, fpca_cur_i) in groups.items():
-        fdists = pdist(fpca_cur_i)
-        cdists = pdist(xy_cur_i) / 1000.0  # to mm
+        subpairs = get_subpairs(xy_cur_i/1000., fpca_cur_i, pci, dist_th)
+        cdists = subpairs['Distance']
+        fdists = subpairs['Distance_feature']
         dff_groups[name] = pd.DataFrame(np.array([cdists, fdists]).transpose(),
                                        columns=('euclidean_distance', 'feature_distance'))
 
@@ -444,8 +511,8 @@ if __name__ == '__main__':
         feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
 
     layer = False
-    merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
-    #merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
+    #merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
+    merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
 
     if 0:
         atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'
