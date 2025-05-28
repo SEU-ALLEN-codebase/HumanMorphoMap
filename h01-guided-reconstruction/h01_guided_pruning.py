@@ -14,20 +14,45 @@ from swc_handler import parse_swc, write_swc
 from morph_topo import morphology
 
 class SWCPruneByStems:
-    def __init__(self, swcfile):
+    def __init__(self, swcfile, swc_out, max_nstems=12):
         # load the file
-        self._load_swc_and_get_basic_info(swcfile)
-
-    def _load_swc_and_get_basic_info(self, swcfile):
         tree = parse_swc(swcfile)
+        self._get_basic_info(tree)
+        self.max_nstems = max_nstems
+
+        self.swc_out = swc_out
+    
+    def _get_basic_info(self, tree):
         self.morph = morphology.Morphology(tree)
         topo_tree, seg_dict = self.morph.convert_to_topology_tree()
         # convert to topo tree
         self.topo = morphology.Topology(topo_tree)
         # get the soma-connecting points
         self.primary_pts = self.morph.child_dict[self.morph.idx_soma]
-        #critical_points = topo.tips | topo.bifurcation
-        #self.primary_cpoints = [pid for pid in critical_points if topo.pos_dict[pid][-1] == topo.p_soma]
+        self.subtrees = self._get_subtrees()
+
+    def _merge_and_reset_info(self, merged):
+        new_tree = []
+        for node in self.morph.tree:
+            nid = node[0]
+            if nid in merged:
+                new_node = list(node)
+                new_node[-1] = merged[nid]
+                new_node = tuple(new_node)
+            else:
+                new_node = node
+            new_tree.append(new_node)
+        # reset the objects
+        self._get_basic_info(new_tree)
+
+    def _remove_nodes(self, to_remove_nodes):
+        new_tree = []
+        for node in self.morph.tree:
+            nid = node[0]
+            if nid not in to_remove_nodes:
+                new_tree.append(node)
+        # reset the objects
+        self._get_basic_info(new_tree)
 
     def _get_subtrees(self):
         """
@@ -63,7 +88,7 @@ class SWCPruneByStems:
             
             subtrees[node] = subtree_nodes
         
-        self.subtrees = subtrees        
+        subtrees = subtrees        
 
         return subtrees
         
@@ -146,7 +171,7 @@ class SWCPruneByStems:
         
         # 2. 获取每个一级节点的子节点数量
         child_counts = {
-            node: len(morph.child_dict.get(node, []))
+            node: len(self.subtrees.get(node, []))
             for node in overlaps.keys()
         }
         
@@ -175,18 +200,15 @@ class SWCPruneByStems:
                     merges[node1] = node2
                 processed.update([node1, node2])
 
-            import ipdb; ipdb.set_trace()
-            print()
-        
+        ''' # I think greedy prune is enough, so I comment out this
         # 4. 处理与多个节点重叠的情况
-        multi_overlaps = {}
         for node1, node2 in overlaps.items():
             if node2 is None or node1 in processed:
                 continue
             
             # 收集所有重叠节点
             overlapping_nodes = [n for n, m in overlaps.items() 
-                               if m == node1 or m == node1]
+                               if m == node1]
             overlapping_nodes.append(node2)
             
             # 选择子节点最多的作为父节点
@@ -197,45 +219,82 @@ class SWCPruneByStems:
                 if node != best_parent:
                     merges[node] = best_parent
                     processed.add(node)
+        '''
         
         return merges
+
 
     def _prune_by_radius(self):
         '''
         Merge primary nodes within the radius range of nodes in other non-soma points
         '''
-        merged = self.get_primary_node_merges()
-        return merged
+        nstems = len(self.subtrees)
+        delta = 1024
+        while (nstems > self.max_nstems) and (delta > 0):
+            prev_nstems = nstems
+            merged = self.get_primary_node_merges()
+            self._merge_and_reset_info(merged)
+            nstems = len(self.subtrees)
+            delta = prev_nstems - nstems
+            print(delta)
+        
+    def _prune_by_subtree_size(self):
+        nstems = len(self.subtrees)
+        if nstems <= self.max_nstems:
+            return
+        
+        # sort the subtrees by number of nodes
+        tree_sizes = {node: len(subtree) for node, subtree in self.subtrees.items()}
+        sorted_tree_sizes = sorted(tree_sizes.items(), key=lambda x:x[1])
+        to_remove_nodes = []
+        for (stree_idx, stree_cnt) in sorted_tree_sizes[:-self.max_nstems]:
+            to_remove_nodes.extend(self.subtrees[stree_idx])
+
+        self._remove_nodes(set(to_remove_nodes))
+        
 
     def run(self):
-        merged = self._prune_by_radius()
-        print(f'--> {len(merged)}')
+        self._prune_by_radius()
+        self._prune_by_subtree_size()
+        nstems = len(self.subtrees)
+        assert (nstems <= self.max_nstems)
+    
+        # save to file
+        write_swc(self.morph.tree, self.swc_out)
 
 
-def prune_all(swc_dir, gf_file):
+def prune_all(swc_dir, gf_file, output_dir):
     # Parsing the feature file
     gfs = pd.read_csv(gf_file, index_col=0)
 
     cnter = 0
     for swc_file in glob.glob(os.path.join(swc_dir, '*.swc')):
         cnter += 1
+        
         swc_name = os.path.split(swc_file)[-1]
+        swc_out = os.path.join(output_dir, swc_name)
+        if os.path.exists(swc_out):
+            continue
+
         # check the number of stems
         nstems = gfs.loc[swc_name[:-4], 'Stems']
         if nstems > 12:
             print(f'[{cnter}] #stems={nstems} for neuron: {swc_name}')
             # Prune or merge the excessive subtrees
-            pruner = SWCPruneByStems(swc_file)
+            pruner = SWCPruneByStems(swc_file, swc_out)
             pruner.run()
+        else:
+            os.system(f'cp "{swc_file}" {output_dir}')
 
 
 
 if __name__ == '__main__':
     swc_dir = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um'
-    swcfile = os.path.join(swc_dir, '11620_P027_T01_-_S011_-_STG.R_MTG.R_R0613_HZY_20230301_RJ.swc')
+    #swcfile = os.path.join(swc_dir, '11620_P027_T01_-_S011_-_STG.R_MTG.R_R0613_HZY_20230301_RJ.swc')
     gf_file = 'auto8.4k_0510_resample1um.csv'
+    output_dir = './data/auto8.4k_0510_pruned'
     
-    prune_all(swc_dir, gf_file)
+    prune_all(swc_dir, gf_file, output_dir=output_dir)
 
     
 

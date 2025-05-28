@@ -41,10 +41,17 @@ def resample_sort_swc(swc_in, swc_out):
 if __name__ == '__main__':
     if 1: 
         # resample manual morphologies
-        indir = '/PBshare/SEU-ALLEN/Users/XiaoqinGu/dataset/H01_pyramidal_w_dendriteano/cut_new/level3'    # 25um
-        outdir = './data/H01_resample1um_prune25um'
+        #indir = '/PBshare/SEU-ALLEN/Users/XiaoqinGu/dataset/H01_pyramidal_w_dendriteano/cut_new/level3'    # 25um
+        #outdir = './data/H01_resample1um_prune25um'
+        
         #indir = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/swc_1um'
-        #outdir = './data/auto8.4k_0510_resample1um'
+        #indir = './data/auto8.4k_0510_pruned'
+        #outdir = './data/auto8.4k_0510_pruned_resample1um'
+        
+        # manual data
+        indir = '/data/kfchen/trace_ws/paper_auto_human_neuron_recon/swc_label/1um_swc_lab'
+        outdir = './data/manual_resampled1um'
+
         step = 1    # 1um
         args_list = []
         for swcfile in glob.glob(os.path.join(indir, '*.swc')):

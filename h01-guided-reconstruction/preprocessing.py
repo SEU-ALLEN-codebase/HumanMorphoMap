@@ -13,7 +13,7 @@ from global_features import calc_global_features_from_folder
 def compare_features():
     # 读取两个CSV文件
     df1 = pd.read_csv('gf_H01_resample1um_prune25um.csv', index_col=0)
-    df2 = pd.read_csv('auto8.4k_0510_resample1um.csv', index_col=0)
+    df2 = pd.read_csv('auto8.4k_0510_pruned_resample1um.csv', index_col=0)
 
     # 提取特征列（排除第一列的名称列）
     #features = df1.columns
@@ -51,15 +51,19 @@ def compare_features():
     plt.close()
 
 if __name__ == '__main__':
-    if 0:
+    if 1:
         # calculate global features
-        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
-        outfile = 'gf_H01_resample1um_prune25um.csv'
-        #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um'
-        #outfile = 'auto8.4k_0510_resample1um.csv'
+        #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
+        #outfile = 'gf_H01_resample1um_prune25um.csv'
+    
+        #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_pruned_resample1um'
+        #outfile = 'auto8.4k_0510_pruned_resample1um.csv'
+
+        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/manual_resampled1um'
+        outfile = 'manual_resampled1um.csv'
         nprocessors = 16
         calc_global_features_from_folder(swc_dir, outfile, nprocessors=nprocessors, timeout=360)
 
-    if 1:
+    if 0:
         compare_features()
 
