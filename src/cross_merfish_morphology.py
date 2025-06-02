@@ -24,7 +24,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     df['smoothed_y'] = ndimage.convolve1d(df['mean_y'], np.ones(3)/3., mode='reflect')
     
     # plotting
-    sns.set_theme(style='ticks', font_scale=2.2)
+    sns.set_theme(style='ticks', font_scale=2.4)
     fig = plt.figure(figsize=(8,8))
     #g1 = sns.lineplot(x='mean_x', y='smoothed_y', data=df, color='r', linewidth=3, alpha=0.5)
     #g2 = sns.scatterplot(x='mean_x', y='smoothed_y', data=df, marker='o', color='black', s=100, alpha=0.75)
@@ -49,7 +49,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
         print(f'{slope2:.3f}, {intercept2:.3f}, {r_value2:.3f}, {p_value2:.3g}, {std_err2:.3f}')
     
     plt.xlabel('Transcriptomic dissimilarity')
-    plt.ylabel('Morphological dissimilarity')
+    plt.ylabel('Morphology dissimilarity')
     ax = plt.gca()
     ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_linewidth(2)
@@ -63,6 +63,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     ym = (df['mean_y'].min() + df['mean_y'].max()) / 2.
     plt.ylim(ym-delta/2, ym+delta/2)
     
+    plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'morphology_vs_merfish_{cell_type}.png', dpi=300)
     plt.close()
     

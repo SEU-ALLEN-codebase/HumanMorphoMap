@@ -141,9 +141,9 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
             ax.set_xlim(-0.5, 1.5)
             
             # 标签和标题
-            ax.set_title(feature)
-            ax.set_ylabel('')
-            ax.set_xlabel('Tissue type')
+            #ax.set_title(feature)
+            ax.set_ylabel(feature)
+            ax.set_xlabel('')
             ax.tick_params(axis='x', rotation=0)
             ax.tick_params(axis='y', direction='in')
             ax.set_xticks([0, 1])
@@ -151,8 +151,8 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
             
             # bold
             ax.spines['left'].set_linewidth(2)
-            ax.spines['right'].set_linewidth(2)
-            ax.spines['top'].set_linewidth(2)
+            ax.spines['right'].set_visible(False) #set_linewidth(2)
+            ax.spines['top'].set_visible(False) #set_linewidth(2)
             ax.spines['bottom'].set_linewidth(2)
             #ax.legend()
 
@@ -211,7 +211,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         '浸润': 'infiltration'
     })
 
-    if 0:
+    if 1:
         # morphological analysis
         for ctype_id, ctype in ctype_dict.items():
             gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
@@ -303,8 +303,8 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         plt.xlim(-0.5, 1.5)
         plt.ylim(0, 30)
         plt.xticks(x_pos, groups)
-        plt.xlabel('Tissue types')
-        plt.ylabel('Percentage of nonpyramidal cells')
+        plt.xlabel('')
+        plt.ylabel('% nonpyramidal cells')
         plt.subplots_adjust(left=0.17, bottom=0.17)
         #plt.title('Comparison of NP Ratios (Mean ± SEM)')
         plt.savefig('nonpyramidal_percentage_across_tissue_types.png', dpi=300)
@@ -320,7 +320,8 @@ if __name__ == '__main__':
     
     if 1:
         meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
-        gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+        #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+        gf_file = '../h01-guided-reconstruction/auto8.4k_0510_pruned_resample1um.csv'
         ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
         morphology_difference_between_infiltration_normal(meta_file_neuron, meta_file_tissue_JSP, gf_file, ctype_file, ihc=1)
 

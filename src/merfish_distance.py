@@ -123,7 +123,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
     
     xn, yn = 'euclidean_distance', 'feature_distance'
     if overall_distribution:
-            sns.set_theme(style='ticks', font_scale=1.6)
+            sns.set_theme(style='ticks', font_scale=2.)
             plt.figure(figsize=(8,8))
             #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5,
             #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
@@ -132,7 +132,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
 
             plt.xlim(0, 5)
     else:
-        sns.set_theme(style='ticks', font_scale=2.2)
+        sns.set_theme(style='ticks', font_scale=2.4)
         plt.figure(figsize=(8,8))
         
         # 创建分箱并计算统计量
@@ -181,6 +181,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
             ym = (bin_stats['mean'].min() + bin_stats['mean'].max())/2.
             plt.ylim(ym-delta/2, ym+delta/2)
 
+    plt.xticks([0,1,2,3,4,5])
     plt.xlabel('Soma-soma distance (mm)')
     plt.ylabel('Transcriptomic dissimilarity')
     ax = plt.gca()
@@ -189,9 +190,14 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
     ax.spines['right'].set_linewidth(2)
     ax.spines['top'].set_linewidth(2)
     ax.tick_params(width=2)
+
+    if overall_distribution:
+        ax.yaxis.set_major_locator(MultipleLocator(2))
+    else:
+        ax.yaxis.set_major_locator(MultipleLocator(0.5))
+
     plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
-    print()
 
 
 def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_range=True):
@@ -203,7 +209,7 @@ def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_r
         figname: 输出文件名前缀
         restrict_range: 是否限制y轴范围
     """
-    sns.set_theme(style='ticks', font_scale=2.1)
+    sns.set_theme(style='ticks', font_scale=2.4)
     plt.figure(figsize=(8, 8))
 
     xn, yn = 'euclidean_distance', 'feature_distance'
@@ -256,6 +262,7 @@ def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_r
     
     # 设置图形样式
     plt.xlim(0, 5)
+    plt.xticks([0,1,2,4,5])
     if restrict_range:
         # 计算所有分组的共同y轴范围
         all_medians = []
@@ -292,7 +299,7 @@ def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_r
     ax.yaxis.set_major_locator(MultipleLocator(ytick_step))  # 每隔1单位显示一个刻度
     ax.xaxis.set_major_locator(MultipleLocator(1))  # 每隔2单位显示一个刻度
     
-    plt.subplots_adjust(bottom=0.12, left=0.12)
+    plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'{figname}.png', dpi=300)
     plt.close()
 
@@ -339,7 +346,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         dff = pd.DataFrame(np.array([cdists, fdists]).transpose(), 
                            columns=('euclidean_distance', 'feature_distance'))
 
-        overall_distribution = True
+        overall_distribution = False
         _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range, overall_distribution=overall_distribution)
 
 

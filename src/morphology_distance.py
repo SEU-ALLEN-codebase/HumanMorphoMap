@@ -19,6 +19,7 @@ os.environ["TIFFWARNINGS"] = "0"
 import SimpleITK as sitk
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import seaborn as sns
 
 from ml.feature_processing import standardize_features
@@ -96,7 +97,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         
         xn, yn = 'euclidean_distance', 'feature_distance' 
         if overall_distribution:
-            sns.set_theme(style='ticks', font_scale=1.6)
+            sns.set_theme(style='ticks', font_scale=2.)
             plt.figure(figsize=(8,8))
             #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
             #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
@@ -104,9 +105,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             figname = figname + '_overall'
 
             plt.xlim(0, 5)
-            
         else:
-            sns.set_theme(style='ticks', font_scale=2.2)
+            sns.set_theme(style='ticks', font_scale=2.4)
             plt.figure(figsize=(8,8))
 
             # 创建分箱并计算统计量
@@ -149,7 +149,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             plt.xlim(0, 5)
             # Adjust plot limits
             bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
-            delta = 2.5
+            delta = 1.5
             ym = (bin_stats['mean'].min() + bin_stats['mean'].max())/2.
             plt.ylim(ym-delta/2, ym+delta/2)
 
@@ -157,7 +157,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             #for edge in np.linspace(0, 5, num_bins+1):
             #    plt.axvline(edge, color='gray', linestyle=':', alpha=0.3)
 
-                    
+
+        plt.xticks([0,1,2,3,4,5])                    
         plt.xlabel('Soma-soma distance (mm)')   
         plt.ylabel('Morphology dissimilarity')
         ax = plt.gca()
@@ -165,14 +166,20 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         ax.spines['bottom'].set_linewidth(2)
         ax.spines['right'].set_linewidth(2)
         ax.spines['top'].set_linewidth(2)
+        
+        if overall_distribution:
+            ax.yaxis.set_major_locator(MultipleLocator(2))
+        else:
+            ax.yaxis.set_major_locator(MultipleLocator(0.5))
+
         ax.tick_params(width=2)#, length=6)
         plt.subplots_adjust(bottom=0.15, left=0.15)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
     
 
 
-    cell_type = 'nonpyramidal'
-    overall_distribution = True
+    cell_type = 'pyramidal'
+    overall_distribution = False
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
@@ -389,7 +396,8 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
 if __name__ == '__main__':
     meta_file_neuron = '../meta/1-50114.xlsx.csv'
-    gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+    #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
+    gf_file = '../h01-guided-reconstruction/auto8.4k_0510_pruned_resample1um.csv'
     ihc = 2 # 0,1,2(all type)
 
     if 0:
