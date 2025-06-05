@@ -120,17 +120,20 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
         df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
     else:
         df_sample = df
-    
-    xn, yn = 'euclidean_distance', 'feature_distance'
-    if overall_distribution:
-            sns.set_theme(style='ticks', font_scale=2.)
-            plt.figure(figsize=(8,8))
-            #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5,
-            #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
-            sns.displot(df, x=xn, y=yn, cmap='Reds')
-            figname = figname + '_overall'
 
-            plt.xlim(0, 5)
+    xn, yn = 'euclidean_distance', 'feature_distance'
+    xlim0, xlim1 = 0, 3
+    if overall_distribution:
+        sns.set_theme(style='ticks', font_scale=1.8)
+        plt.figure(figsize=(8,8))
+        #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5,
+        #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
+        sns.displot(df, x=xn, y=yn, cmap='Reds',
+                    #cbar=True,
+                    #cbar_kws={"label": "Count", 'aspect': 5})
+        figname = figname + '_overall'
+
+        plt.xlim(xlim0, xlim1)
     else:
         sns.set_theme(style='ticks', font_scale=2.4)
         plt.figure(figsize=(8,8))
@@ -172,7 +175,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
         print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
 
         # 设置坐标轴范围
-        plt.xlim(0, 5)
+        plt.xlim(xlim0, xlim1)
         # Adjust plot limits
         bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
 
@@ -181,7 +184,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
             ym = (bin_stats['mean'].min() + bin_stats['mean'].max())/2.
             plt.ylim(ym-delta/2, ym+delta/2)
 
-    plt.xticks([0,1,2,3,4,5])
+    plt.xticks(np.arange(xlim0, xlim1+1))
     plt.xlabel('Soma-soma distance (mm)')
     plt.ylabel('Transcriptomic dissimilarity')
     ax = plt.gca()
@@ -196,7 +199,7 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
     else:
         ax.yaxis.set_major_locator(MultipleLocator(0.5))
 
-    plt.subplots_adjust(bottom=0.15, left=0.15)
+    plt.subplots_adjust(bottom=0.16, left=0.16)
     plt.savefig(f'{figname}.png', dpi=300); plt.close()
 
 
@@ -346,8 +349,9 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         dff = pd.DataFrame(np.array([cdists, fdists]).transpose(), 
                            columns=('euclidean_distance', 'feature_distance'))
 
-        overall_distribution = False
-        _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range, overall_distribution=overall_distribution)
+        overall_distribution = True
+        _plot(dff, num=25, zoom=False, figname=figname, restrict_range=restrict_range, 
+              overall_distribution=overall_distribution)
 
 
 def split_by_pc2_quantiles(xy_cur, fpca_cur, pc, pc_id, center, quantiles=[0.25, 0.5, 0.75], visualize=True, cell_name='eL2/3.IT'):
@@ -518,8 +522,8 @@ if __name__ == '__main__':
         feat_file = f'../resources/human_merfish/H18/H18.06.006.{region}.250.expand.rep1.features.csv'
 
     layer = False
-    #merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
-    merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
+    merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
+    #merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
 
     if 0:
         atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'

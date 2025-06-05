@@ -96,15 +96,19 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         df.loc[:, 'euclidean_distance'] = df['euclidean_distance'] / 1000. # to mm
         
         xn, yn = 'euclidean_distance', 'feature_distance' 
+        xlim0, xlim1 = 0, 3
         if overall_distribution:
-            sns.set_theme(style='ticks', font_scale=2.)
-            plt.figure(figsize=(8,8))
-            #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5, 
-            #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
-            sns.displot(df, x=xn, y=yn, cmap='Reds')
+            sns.set_theme(style='ticks', font_scale=1.8)
+            plt.figure(figsize=(8,6))
+            sns.displot(
+                df, x=xn, y=yn, cmap='Reds', 
+                #cbar=True,
+                #cbar_kws={"label": "Count", 'aspect': 5}
+            )
             figname = figname + '_overall'
 
-            plt.xlim(0, 5)
+            plt.xlim(xlim0, xlim1)
+
         else:
             sns.set_theme(style='ticks', font_scale=2.4)
             plt.figure(figsize=(8,8))
@@ -146,7 +150,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
 
             # 设置坐标轴范围
-            plt.xlim(0, 5)
+            plt.xlim(xlim0, xlim1)
             # Adjust plot limits
             bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
             delta = 1.5
@@ -158,7 +162,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             #    plt.axvline(edge, color='gray', linestyle=':', alpha=0.3)
 
 
-        plt.xticks([0,1,2,3,4,5])                    
+        plt.xticks(np.arange(xlim0, xlim1+1))                    
         plt.xlabel('Soma-soma distance (mm)')   
         plt.ylabel('Morphology dissimilarity')
         ax = plt.gca()
@@ -173,13 +177,13 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             ax.yaxis.set_major_locator(MultipleLocator(0.5))
 
         ax.tick_params(width=2)#, length=6)
-        plt.subplots_adjust(bottom=0.15, left=0.15)
+        plt.subplots_adjust(bottom=0.16, left=0.16)
         plt.savefig(f'{figname}.png', dpi=300); plt.close()
     
 
 
     cell_type = 'pyramidal'
-    overall_distribution = False
+    overall_distribution = True
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
@@ -192,7 +196,6 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
         'pyramidal': 0,
         'nonpyramidal': 1
     }
-    
 
     if os.path.exists(relation_file):
         df = pd.read_csv(relation_file)
