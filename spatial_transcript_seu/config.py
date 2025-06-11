@@ -13,3 +13,7 @@ LAYER_CODES = {
     'L6': 6,
     'WM': 7
 }
+
+LAYER_CODES_REV = dict(zip(LAYER_CODES.values(), LAYER_CODES.keys()))
+
+

@@ -11,7 +11,7 @@ import pandas as pd
 import scanpy as sc
 from scipy import ndimage
 
-from config import LAYER_CODES
+from config import LAYER_CODES, LAYER_CODES_REV
 
 
 def get_rotation_angles(rotation_file=
@@ -66,7 +66,7 @@ def fill_unlabeled_areas(he_img, mask_img):
     
     return filled_mask
 
-def assign_spots_layers(sample_dir, annot_dir, rot_angle, spots=None):
+def get_layer_masks(sample_dir, annot_dir, rot_angle):
     '''
     The original image maybe rotated when labeling
     '''
@@ -111,15 +111,89 @@ def assign_spots_layers(sample_dir, annot_dir, rot_angle, spots=None):
     filled_mask_ch3 = cv2.cvtColor(filled_mask_ch1, cv2.COLOR_GRAY2BGR)
     img_concat = np.vstack((img, img_mask*25, filled_mask_ch3*25))
     cv2.imwrite(f'concated_mask.png', img_concat)
+    # save the mask_file
+    cv2.imwrite(os.path.join(annot_dir, 'layer_mask.png'), filled_mask_ch1)
+
+    return filled_mask_ch1
+
+def get_layers(layer_mask, yy, xx, pct_outlier=0.05):
+    """
+    获取点 (yy, xx) 的前景标签，若落在背景上则用最近邻插值修正。
+    
+    参数:
+        layer_mask: 单通道mask，0=背景，1-7=前景
+        yy: 点的行坐标（一维数组）
+        xx: 点的列坐标（一维数组）
+    
+    返回:
+        labels: 修正后的前景标签（1-7）
+    """
+    # 1. 提取原始标签
+    labels = layer_mask[yy, xx]
+    
+    # 2. 标记需要修正的点（落在背景上的点）
+    bg_mask = (labels == 0)
+    if not np.any(bg_mask):
+        return labels  # 无背景点，直接返回
+
+    if 1.0 * bg_mask.sum() / len(labels) > pct_outlier:
+        raise ValueError("Too much outliers, please check the system")
+    
+    # 3. 计算最近前景的坐标
+    # 3.1 创建一个前景的二进制掩码（1-7为True，0为False）
+    foreground = (layer_mask > 0)
+    
+    # 3.2 计算距离变换，得到最近前景的坐标
+    _, nearest_coords = ndimage.distance_transform_edt(
+        ~foreground,  # 输入是背景区域（~foreground）
+        return_indices=True
+    )
+    
+    # 4. 修正背景点的标签
+    yy_bg, xx_bg = yy[bg_mask], xx[bg_mask]
+    nearest_yy = nearest_coords[0, yy_bg, xx_bg]
+    nearest_xx = nearest_coords[1, yy_bg, xx_bg]
+    labels[bg_mask] = layer_mask[nearest_yy, nearest_xx]
+    
+    return labels
+
+def assign_layers_to_spots(layer_mask, spots_file, visual_check=False, save=True):
+    adata = sc.read(spots_file, backed='r')
+    spots_coords_pxl = np.round(adata.obsm['spatial_pxl']).astype(int)
+    
+    if visual_check:
+        # visualize
+        layer_mask = layer_mask * 25
+        point_size = 2  # 控制点的扩展范围（2 表示 5x5 区域）
+        height, width = layer_mask.shape[:2]
+        for y, x in spots_coords_pxl:
+            y_min, y_max = max(0, y-point_size), min(height, y+point_size+1)
+            x_min, x_max = max(0, x-point_size), min(width, x+point_size+1)
+            layer_mask[y_min:y_max, x_min:x_max] = 255
+
+        cv2.imwrite('temp.png', layer_mask)
+
+    yy, xx = spots_coords_pxl[:,0], spots_coords_pxl[:,1]
+    layer_codes = get_layers(layer_mask, yy, xx)
+    layer_names = [LAYER_CODES_REV[k] for k in layer_codes]
+    adata.obs['laminar'] = layer_names
+    
+    if save:
+        new_file = f'{spots_file[:-5]}_withLaminar.h5ad'
+        adata.write(new_file)
+    
 
 
 if __name__ == '__main__':
     sample_id = 'P00117'
     sample_dir = f'/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/{sample_id}'
     annot_dir = f'/data2/lyf/data/transcriptomics/ST_SEU/{sample_id}/layers'
+    spots_file = f'./data/spatial_adata_{sample_id}_processed.h5ad'
     
     rotations = get_rotation_angles()   # rotation angles counter-clockwise
     rot_angle = rotations.loc[sample_id].values[0]
 
-    assign_spots_layers(sample_dir, annot_dir, rot_angle)   
+    #get_layer_masks(sample_dir, annot_dir, rot_angle)
+    layer_mask = cv2.imread(os.path.join(annot_dir, 'layer_mask.png'), cv2.IMREAD_UNCHANGED)
+    assign_layers_to_spots(layer_mask, spots_file)
 

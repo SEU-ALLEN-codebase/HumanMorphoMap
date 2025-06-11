@@ -60,7 +60,7 @@ def compile_10x_spatial_data(matrix_h5, positions_csv, scalefactors_json, out_ad
     adata = adata[:, keep_genes]
     
     # 5. 添加空间坐标到obsm (使用高分辨率像素坐标)
-    adata.obsm['spatial'] = positions[
+    adata.obsm['spatial_pxl'] = positions[
         ['pxl_row_in_fullres', 'pxl_col_in_fullres']
     ].values * scalefactors['tissue_hires_scalef']  # 缩放至高分辨率
     
@@ -124,25 +124,23 @@ def preprocessing(adfile, min_genes=200, max_genes=10000, max_mt=20, min_cells=1
 
 if __name__ == '__main__':
 
-    if 0:
+    if 1:
         # preprocess the data for subsequent analyses
-        data_path = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data'
-        #for sample_id in ['P065_0', 'P065_500']:
-        for sample_id in ['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
+        data_path = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/P00065'
+        for sample_id in ['P065_0', 'P065_500']:
+        #for sample_id in ['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
             print(sample_id)
             matrix_h5 = f'{data_path}/{sample_id}/filtered_feature_bc_matrix.h5'
             position_csv = f'{data_path}/{sample_id}/spatial/tissue_positions.csv'
             scalefactors_json = f'{data_path}/{sample_id}/spatial/scalefactors_json.json'
 
             out_adata = f'./data/spatial_adata_{sample_id}.h5ad'
-            if os.path.exists(out_adata):
-                continue
+            #if os.path.exists(out_adata):
+            #    continue
         
             compile_10x_spatial_data(matrix_h5, position_csv, scalefactors_json, out_adata)
             preprocessing(out_adata)
 
-    if 1:
-        predict_layers()
         
 
 
