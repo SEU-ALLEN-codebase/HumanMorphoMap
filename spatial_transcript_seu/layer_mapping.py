@@ -159,7 +159,7 @@ def get_layers(layer_mask, yy, xx, pct_outlier=0.05):
 
 def assign_layers_to_spots(layer_mask, spots_file, visual_check=False, save=True):
     adata = sc.read(spots_file, backed='r')
-    spots_coords_pxl = np.round(adata.obsm['spatial_pxl']).astype(int)
+    spots_coords_pxl = np.round(adata.obsm['spatial']).astype(int)
     
     if visual_check:
         # visualize

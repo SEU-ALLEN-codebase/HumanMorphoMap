@@ -17,3 +17,10 @@ LAYER_CODES = {
 LAYER_CODES_REV = dict(zip(LAYER_CODES.values(), LAYER_CODES.keys()))
 
 
+PYRAMIDAL_SUPERCLUSTERS = (
+    'Deep-layer near-projecting',
+    'Deep-layer corticothalamic and 6b',
+    'Upper-layer intratelencephalic',
+    'Deep-layer intratelencephalic'
+)
+

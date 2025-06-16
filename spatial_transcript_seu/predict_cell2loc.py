@@ -13,12 +13,16 @@ import anndata
 import gc
 from re import sub
 import cell2location
+from cell2location.utils.filtering import filter_genes
+
 from scipy.sparse import csr_matrix
 
 import matplotlib as mpl
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from config import PYRAMIDAL_SUPERCLUSTERS
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -52,14 +56,14 @@ def read_and_qc(sample_name, path=''):
     adata.var.drop(columns='ENSEMBL', inplace=True)
 
     # Remove possible duplicate genes. To avoid possible errors, I would like to just keep one copy of them.
-    #dup_genes = adata.var.SYMBOL[adata.var.SYMBOL.duplicated(keep='first')].unique()
-    keep_genes =  ~adata.var.SYMBOL.duplicated(keep='first')
-    adata = adata[:, keep_genes]
+    #keep_genes =  ~adata.var.SYMBOL.duplicated(keep='first')
+    #adata = adata[:, keep_genes]
 
-    # Calculate QC metrics
-    adata.X = adata.X.toarray()
-    sc.pp.calculate_qc_metrics(adata, inplace=True)
-    adata.X = csr_matrix(adata.X)
+    if 0:
+        # Calculate QC metrics
+        adata.X = adata.X.toarray()
+        sc.pp.calculate_qc_metrics(adata, inplace=True)
+        adata.X = csr_matrix(adata.X)
 
     # add sample name to obs names
     adata.obs["sample"] = [str(i) for i in adata.obs['sample']]
@@ -68,8 +72,14 @@ def read_and_qc(sample_name, path=''):
     adata.obs.index.name = 'spot_id'
 
     # Match both 'mt-' and 'MT-'
-    adata.var['mt'] = [(gene.startswith('mt-') | (gene.startswith('MT-'))) for gene in adata.var['SYMBOL']]
-    adata.obs['mt_frac'] = adata[:, adata.var['mt'].tolist()].X.sum(1).A.squeeze()/adata.obs['total_counts']
+    #adata.var['mt'] = [(gene.startswith('mt-') | (gene.startswith('MT-'))) for gene in adata.var['SYMBOL']]
+    #adata.obs['mt_frac'] = adata[:, adata.var['mt'].tolist()].X.sum(1).A.squeeze()/adata.obs['total_counts']
+    # find mitochondria-encoded (MT) genes
+    adata.var['MT_gene'] = [gene.startswith('MT-') | gene.startswith('mt-') for gene in adata.var['SYMBOL']]
+
+    # remove MT genes for spatial mapping (keeping their counts in the object)
+    adata.obsm['MT'] = adata[:, adata.var['MT_gene'].values].X.toarray()
+    adata = adata[:, ~adata.var['MT_gene'].values]
     
     return adata
 
@@ -90,7 +100,7 @@ def select_slide(adata, ss, s_col='sample'):
     return slide
 
 
-def plot_qc(adata, slides):
+def plot_vis_qc(adata, slides):
     # PLOT QC FOR EACH SAMPLE
     fig, axs = plt.subplots(len(slides), 4, figsize=(15, 4*len(slides)-4))
     for i, ss in enumerate(adata.obs['sample'].unique()):
@@ -164,32 +174,38 @@ def plot_qc(adata, slides):
             plt.close()
 
 
-def load_scRNA_data(sc_data_file):
-    adata_scrna_raw = sc.read(sc_data_file, backed='r')
-    import ipdb; ipdb.set_trace()
+def preprocess_scRNA_data(sc_data_file, sc_out_file, visualize=False):
+    adata = sc.read(sc_data_file, backed='r')
     # Column name containing cell type annotations
-    covariate_col_names = 'annotation_1'
+    col_name = 'supercluster_term'
+    
+    if visualize:
+        # Visualize the cell type distributions in the UMAP space
+        with mpl.rc_context({'figure.figsize': [10, 10],
+                             'axes.facecolor': 'white'}):
+            # The sc.pl.umap recognizes only `X_umap` instead of `X_UMAP`
+            adata.obsm['X_umap'] = adata.obsm['X_UMAP']
+            sc.pl.umap(adata, color=col_name, size=15,
+                       color_map = 'RdPu', ncols = 1, legend_loc='on data',
+                       legend_fontsize=10)
+            plt.savefig('scrna.png', dpi=300)
+            plt.close()
+ 
+    adata.var.index.name = 'ENSEMBL'   
+    # filter genes
+    sc.pp.filter_genes(adata, min_cells=5)
+    sc.pp.filter_genes(adata, min_cells=int(0.03*adata.shape[0]))
 
-    # Extract a pd.DataFrame with signatures from anndata object
-    inf_aver = adata_snrna_raw.raw.var.copy()
-    inf_aver = inf_aver.loc[:, [f'means_cov_effect_{covariate_col_names}_{i}' 
-                            for i in adata_snrna_raw.obs[covariate_col_names].unique()]]
-    inf_aver.columns = [sub(f'means_cov_effect_{covariate_col_names}_{i}', '', i) 
-                        for i in adata_snrna_raw.obs[covariate_col_names].unique()]
-    inf_aver = inf_aver.iloc[:, inf_aver.columns.argsort()]
+    # filtering
 
-    # normalise by average experiment scaling factor (corrects for sequencing depth)
-    inf_aver = inf_aver * adata_snrna_raw.uns['regression_mod']['post_sample_means']['sample_scaling'].mean()
+    import ipdb; ipdb.set_trace()
+    adata = adata[:, selected].copy()
 
-    with mpl.rc_context({'figure.figsize': [10, 10],
-                         'axes.facecolor': 'white'}):
-        sc.pl.umap(adata_snrna_raw, color=['annotation_1'], size=15,
-                   color_map = 'RdPu', ncols = 1, legend_loc='on data',
-                   legend_fontsize=10)
-        plt.savefig('scrna.png', dpi=300)
-        plt.close()
+    
+    # Usage 
+    
 
-    del adata_scrna_raw
+    del adata
     gc.collect()
 
 
@@ -211,29 +227,28 @@ if __name__ == '__main__':
         slides = []
         n_slides = 0
         for sample_name,sample_path in zip(sample_data['sample_name'], sample_data['sample_path']):
+            print(sample_name)
             slides.append(read_and_qc(sample_name, path=sample_path))
             
             n_slides += 1
             if DEBUG and n_slides >= 2:
                 break
 
-
         # Combine anndata objects together
-        adata = slides[0].concatenate(
+        adata_vis = slides[0].concatenate(
             slides[1:2] if DEBUG else slides[1:],
             batch_key="sample",
             uns_merge="unique",
             batch_categories=sample_data['sample_name'],
             index_unique=None
         )
-
         
-        plot_qc(adata, slides)
+        #plot_vis_qc(adata, slides)
         print()
 
     if 1:
         # load the scRNA data
-        sndata = load_scRNA_data(sc_data_file)
+        sndata = preprocess_scRNA_data(sc_data_file, None)
 
 
 
