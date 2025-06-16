@@ -133,7 +133,7 @@ if __name__ == '__main__':
         # preprocess the data for subsequent analyses
         data_path = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data'
         #for sample_id in ['P065_0', 'P065_500']:
-        for sample_id in ['P00117',]: #['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
+        for sample_id in ['P00117', 'P00083', 'P00089']: #['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
             print(sample_id)
             matrix_h5 = f'{data_path}/{sample_id}/filtered_feature_bc_matrix.h5'
             position_csv = f'{data_path}/{sample_id}/spatial/tissue_positions.csv'

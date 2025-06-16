@@ -11,7 +11,9 @@ LAYER_CODES = {
     'L4': 4,
     'L5': 5,
     'L6': 6,
-    'WM': 7
+    'WM': 7,
+    'L2-L3': 8,
+    'L5-L6': 9,
 }
 
 LAYER_CODES_REV = dict(zip(LAYER_CODES.values(), LAYER_CODES.keys()))

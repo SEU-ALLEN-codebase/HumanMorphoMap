@@ -15,7 +15,7 @@ from config import LAYER_CODES, LAYER_CODES_REV
 
 
 def get_rotation_angles(rotation_file=
-        '/data2/lyf/data/transcriptomics/ST_SEU/P00117/rotate_angles_of_layer_annotation.csv'):
+        '/data2/lyf/data/transcriptomics/ST_SEU/rotate_angles_of_layer_annotation.csv'):
     rotations = pd.read_csv(rotation_file, index_col=0)
     return rotations
 
@@ -84,10 +84,13 @@ def get_layer_masks(sample_dir, annot_dir, rot_angle):
         rotateCode = cv2.ROTATE_90_CLOCKWISE
         rotateCode_r = cv2.ROTATE_90_COUNTERCLOCKWISE
 
-    img_rot = cv2.rotate(img, rotateCode=rotateCode)
+    if rot_angle != 0:
+        img_rot = cv2.rotate(img, rotateCode=rotateCode)
+        img_rot_mask = img_rot.copy()
+    else:
+        img_rot_mask = img.copy()
 
     # map the annotations to see if they are correct
-    img_rot_mask = img_rot.copy()
     img_rot_mask.fill(0)
     annot_files = sorted(glob.glob(os.path.join(annot_dir, 'tissue_hires_image*csv')))
     for annot_file in annot_files:
@@ -99,18 +102,17 @@ def get_layer_masks(sample_dir, annot_dir, rot_angle):
         xy = dfl[['X', 'Y']]
         img_rot_mask[xy['Y'], xy['X']] = layer_code
     
-    # rotate back
-    img_mask = cv2.rotate(img_rot_mask, rotateCode=rotateCode_r)
+    if rot_angle != 0:
+        # rotate back
+        img_mask = cv2.rotate(img_rot_mask, rotateCode=rotateCode_r)
+    else:
+        img_mask = img_rot_mask.copy()
     
-    # check the validity
-    #img_concat = np.vstack((img, img_mask*20))
-    #cv2.imwrite(f'concated_mask.png', img_concat)
-
     # interpolate all foreground pixels
     filled_mask_ch1 = fill_unlabeled_areas(img, img_mask)
     filled_mask_ch3 = cv2.cvtColor(filled_mask_ch1, cv2.COLOR_GRAY2BGR)
     img_concat = np.vstack((img, img_mask*25, filled_mask_ch3*25))
-    cv2.imwrite(f'concated_mask.png', img_concat)
+    cv2.imwrite(os.path.join(annot_dir, f'concated_mask.png'), img_concat)
     # save the mask_file
     cv2.imwrite(os.path.join(annot_dir, 'layer_mask.png'), filled_mask_ch1)
 
@@ -157,21 +159,26 @@ def get_layers(layer_mask, yy, xx, pct_outlier=0.05):
     
     return labels
 
-def assign_layers_to_spots(layer_mask, spots_file, visual_check=False, save=True):
+def assign_layers_to_spots(layer_file, spots_file, visual_check=False, save=True):
+    # load the layer mask
+    layer_mask = cv2.imread(layer_file, cv2.IMREAD_UNCHANGED)
+
+    # spots information
     adata = sc.read(spots_file, backed='r')
     spots_coords_pxl = np.round(adata.obsm['spatial']).astype(int)
     
     if visual_check:
         # visualize
-        layer_mask = layer_mask * 25
+        layer_mask_vis = layer_mask * 25
         point_size = 2  # 控制点的扩展范围（2 表示 5x5 区域）
-        height, width = layer_mask.shape[:2]
+        height, width = layer_mask_vis.shape[:2]
         for y, x in spots_coords_pxl:
             y_min, y_max = max(0, y-point_size), min(height, y+point_size+1)
             x_min, x_max = max(0, x-point_size), min(width, x+point_size+1)
-            layer_mask[y_min:y_max, x_min:x_max] = 255
+            layer_mask_vis[y_min:y_max, x_min:x_max] = 255
 
-        cv2.imwrite('temp.png', layer_mask)
+        vis_dir = os.path.split(layer_file)[0]
+        cv2.imwrite(os.path.join(vis_dir, 'spots_on_mask.png'), layer_mask_vis)
 
     yy, xx = spots_coords_pxl[:,0], spots_coords_pxl[:,1]
     layer_codes = get_layers(layer_mask, yy, xx)
@@ -181,19 +188,19 @@ def assign_layers_to_spots(layer_mask, spots_file, visual_check=False, save=True
     if save:
         new_file = f'{spots_file[:-5]}_withLaminar.h5ad'
         adata.write(new_file)
-    
 
 
 if __name__ == '__main__':
-    sample_id = 'P00117'
+    sample_id = 'P00083'
     sample_dir = f'/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/{sample_id}'
     annot_dir = f'/data2/lyf/data/transcriptomics/ST_SEU/{sample_id}/layers'
-    spots_file = f'./data/spatial_adata_{sample_id}_processed.h5ad'
+    spots_file = f'./data/spatial_adata_{sample_id}.h5ad'
     
     rotations = get_rotation_angles()   # rotation angles counter-clockwise
     rot_angle = rotations.loc[sample_id].values[0]
 
-    #get_layer_masks(sample_dir, annot_dir, rot_angle)
-    layer_mask = cv2.imread(os.path.join(annot_dir, 'layer_mask.png'), cv2.IMREAD_UNCHANGED)
-    assign_layers_to_spots(layer_mask, spots_file)
+    get_layer_masks(sample_dir, annot_dir, rot_angle)
+    if 1:
+        layer_file = os.path.join(annot_dir, 'layer_mask.png')
+        assign_layers_to_spots(layer_file, spots_file, visual_check=True)
 
