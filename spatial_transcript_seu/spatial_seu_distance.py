@@ -247,7 +247,91 @@ def process_mask_and_compute_distances(mask, mask_val, start_anchor, end_anchor,
     )
 
 
-def plot_combined(dff_groups, num=25, zoom=False, figname='combined', restrict_range=True):
+def _plot(dff, num=50, figname='temp', nsample=10000, color='black', overall_distribution=False):
+    df = dff.copy()
+    if df.shape[0] > nsample:
+        random.seed(1024)
+        df_sample = df.iloc[random.sample(range(df.shape[0]), nsample)]
+    else:
+        df_sample = df
+
+    xn, yn = 'euclidean_distance', 'feature_distance'
+    xlim0, xlim1 = 0, 3
+    xmax = 5#dff[xn].max()
+    if overall_distribution:
+        sns.set_theme(style='ticks', font_scale=1.8)
+        plt.figure(figsize=(8,8))
+        #sns.scatterplot(df, x='euclidean_distance', y='feature_distance', s=5,
+        #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
+        sns.displot(df, x=xn, y=yn, cmap='Reds',
+                    )
+                    #cbar=True,
+                    #cbar_kws={"label": "Count", 'aspect': 5})
+        figname = figname + '_overall'
+
+    else:
+        sns.set_theme(style='ticks', font_scale=2.4)
+        plt.figure(figsize=(8,8))
+
+        # 创建分箱并计算统计量
+        num_bins = num  # 假设num是之前定义的bins数量
+        df['A_bin'] = pd.cut(df[xn], bins=np.linspace(0, 5.001, num_bins), right=False)
+
+        # 计算每个bin的统计量（包括区间中点）
+        bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
+        bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
+        bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
+        bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+
+        # 绘图：点图+误差条（使用实际数值坐标）
+        plt.errorbar(x=bin_stats['bin_center'],
+                     y=bin_stats['mean'],
+                     yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+                     fmt='o',
+                     markersize=12,
+                     color='black',
+                     ecolor='gray',
+                     elinewidth=3,
+                     capsize=7,
+                     capthick=3)
+
+        # 添加趋势线（与统计分析一致）
+        sns.regplot(x='bin_center', y='mean', data=bin_stats, color=color,
+                    scatter=False,
+                    line_kws={'color':'red', 'linewidth':3, 'alpha':0.7},
+                    lowess=True)
+
+        # 统计分析（使用与实际坐标一致的数据）
+        p_spearman = spearmanr(bin_stats['bin_center'], bin_stats['mean'], alternative='greater')
+        p_pearson = pearsonr(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'Spearman: {p_spearman.statistic:.3f}, Pearson: {p_pearson.statistic:.3f}')
+
+        slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['mean'])
+        print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
+
+
+    plt.xlabel('Soma-soma distance (mm)')
+    plt.ylabel('Transcriptomic dissimilarity')
+    ax = plt.gca()
+    ax.spines['left'].set_linewidth(2)
+    ax.spines['bottom'].set_linewidth(2)
+    ax.spines['right'].set_linewidth(2)
+    ax.spines['top'].set_linewidth(2)
+    ax.tick_params(width=2)
+
+    if overall_distribution:
+        #ax.yaxis.set_major_locator(MultipleLocator(2))
+        plt.xlim(0, 3)
+        plt.ylim(0, 30)
+    else:
+        #ax.yaxis.set_major_locator(MultipleLocator(0.5))
+        plt.xlim(0, 3)
+
+    plt.subplots_adjust(bottom=0.16, left=0.17)
+    plt.savefig(f'{figname}.png', dpi=300); plt.close()
+
+
+def plot_combined(dff_groups, num=25, figname='combined', restrict_range=True):
     """
     将所有分组的子图合并到同一个图中
     输入:
@@ -465,11 +549,6 @@ def get_subpairs(xys_i, dist_col, fpca_i):
 
 def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file, 
                                      layer='', sample_name='', direction='lateral'):
-    # Estimate the centerline
-    mask = cv2.imread(layer_img_file, cv2.IMREAD_UNCHANGED)
-    mask_val = LAYER_CODES[layer]
-    start_anchor, end_anchor = LAYER_ANCHORS[sample_name][layer]
-
     # load the coordinates of cells
     adata_st = sc.read(st_file)
     adata_st = norm_and_pca(adata_st, N=50)
@@ -477,60 +556,82 @@ def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file,
     adata_st.obsm['xy_pxl'] = adata_st.obsm['spatial'] * \
                adata_st.uns['spatial'][sample_name]['scalefactors']['tissue_hires_scalef']
 
-    # Estimate the lateral and axial coordinates for the points
-    adata_st, centerline_points = process_mask_and_compute_distances(
-            mask, mask_val, start_anchor, end_anchor, adata_st, visualize=False
-    )
-
     # get the prymidal cells
     df_ct = pd.read_csv(celltype_file, index_col=0)
     # extract and merge the cell type information into the data
     adata_st.obs['cell_code'] = df_ct.loc[adata_st.obs.index, 'cell_code']
 
-    # extract the target spots
-    adata_l = adata_st[(adata_st.obs.cell_code == 1) & (adata_st.obs['in_layer_mask'] == True)]
-    import ipdb; ipdb.set_trace()
 
-    # split to quantiles
-    if direction == 'lateral':
-        qdirection = 'axial'
-    elif direction == 'axial':
-        qdirection = 'lateral'
+    if direction is None:
+        # extract the target spots
+        adata_l = adata_st[adata_st.obs.cell_code == 1]
+        print(f'Number of excitatory cells: {adata_l.shape[0]}')
+
+        # pure distance-vs-similarity
+        cdists = pdist(adata_l.obsm['spatial'] / 1000.)
+        fdists = pdist(adata_l.obsm['X_pca'])
+        df_dists = pd.DataFrame(np.array([cdists, fdists]).transpose(),
+                                columns=('euclidean_distance', 'feature_distance'))
+
+        overall_distribution = True
+        figname = f'{sample_name}'
+        _plot(df_dists, num=25, figname=figname, overall_distribution=overall_distribution)
+
     else:
-        raise ValueError(f'Error value for @args [direction]: {direction}')
+        # Estimate the centerline
+        mask = cv2.imread(layer_img_file, cv2.IMREAD_UNCHANGED)
+        mask_val = LAYER_CODES[layer]
+        start_anchor, end_anchor = LAYER_ANCHORS[sample_name][layer]
+        
+        # Estimate the lateral and axial coordinates for the points
+        adata_st, centerline_points = process_mask_and_compute_distances(
+                mask, mask_val, start_anchor, end_anchor, adata_st, visualize=False
+        )
 
-    dist_col = f'{direction}_distances'
-    qdist_col = f'{qdirection}_distances'
-    vis_title = f'{layer}_{direction}'
+        # extract the target spots
+        adata_l = adata_st[(adata_st.obs.cell_code == 1) & (adata_st.obs['in_layer_mask'] == True)]
+        # Coordinates in layer-corrected space
+        xys_l = adata_l.obs[['axial_distances', 'lateral_distances']]
+        
+        # split to quantiles
+        if direction == 'lateral':
+            qdirection = 'axial'
+        elif direction == 'axial':
+            qdirection = 'lateral'
+        else:
+            raise ValueError(f'Error value for @args [direction]: {direction}')
 
-    xys_l = adata_l.obs[['axial_distances', 'lateral_distances']]
-    groups = split_by_quantiles(
-                adata_l.obsm['spatial'], xys_l, qdist_col, adata_l.obsm['X_pca'], 
-                sample_name=sample_name, cell_name=vis_title
-    )
+        dist_col = f'{direction}_distances'
+        qdist_col = f'{qdirection}_distances'
+        vis_title = f'{layer}_{direction}'
 
-    # 检查每组点数
-    for name, pts in groups.items():
-        print(f"{name}: {len(pts[0])} points")
+        groups = split_by_quantiles(
+                    adata_l.obsm['spatial'], xys_l, qdist_col, adata_l.obsm['X_pca'], 
+                    sample_name=sample_name, cell_name=vis_title
+        )
 
-    # 使用示例
-    dff_groups = {}
-    for name, (xys_l_i, fpca_i, xys_i) in groups.items():
-        subpairs = get_subpairs(xys_l_i/1000., dist_col, fpca_i)
-        cdists = subpairs['Distance']
-        fdists = subpairs['Distance_feature']
-        dff_groups[name] = pd.DataFrame(np.array([cdists, fdists]).transpose(),
-                                       columns=('euclidean_distance', 'feature_distance'))
+        # 检查每组点数
+        for name, pts in groups.items():
+            print(f"{name}: {len(pts[0])} points")
 
-    figname = f'{sample_name}_{layer}_{direction}'
-    plot_combined(dff_groups, num=25, figname=figname, restrict_range=False)
+        # 使用示例
+        dff_groups = {}
+        for name, (xys_l_i, fpca_i, xys_i) in groups.items():
+            subpairs = get_subpairs(xys_l_i/1000., dist_col, fpca_i)
+            cdists = subpairs['Distance']
+            fdists = subpairs['Distance_feature']
+            dff_groups[name] = pd.DataFrame(np.array([cdists, fdists]).transpose(),
+                                           columns=('euclidean_distance', 'feature_distance'))
+
+        figname = f'{sample_name}_{layer}_{direction}'
+        plot_combined(dff_groups, num=25, figname=figname, restrict_range=False)
 
    
 
 if __name__ == '__main__':
     sample_name = 'P00083'
     layer = 'L5-L6'
-    direction = 'lateral'
+    direction = None   # options: 'lateral', 'axial', and None
 
     #adata_file = f'data/spatial_data_{sample_name}_withLaminar.h5ad'
     st_dir = f'cell2loc/{sample_name}'

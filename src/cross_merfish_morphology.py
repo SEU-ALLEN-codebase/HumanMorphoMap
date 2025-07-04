@@ -57,11 +57,11 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     ax.spines['top'].set_linewidth(2)
     ax.tick_params(width=2)
     # set the x&y range
-    delta = 2.5
-    xm = (df['mean_x'].min() + df['mean_x'].max()) / 2.
-    plt.xlim(xm-delta/2, xm+delta/2)
-    ym = (df['mean_y'].min() + df['mean_y'].max()) / 2.
-    plt.ylim(ym-delta/2, ym+delta/2)
+    #delta = 2.5
+    #xm = (df['mean_x'].min() + df['mean_x'].max()) / 2.
+    #plt.xlim(xm-delta/2, xm+delta/2)
+    #ym = (df['mean_y'].min() + df['mean_y'].max()) / 2.
+    #plt.ylim(ym-delta/2, ym+delta/2)
     
     plt.subplots_adjust(bottom=0.15, left=0.15)
     plt.savefig(f'morphology_vs_merfish_{cell_type}.png', dpi=300)
@@ -71,6 +71,7 @@ def cross_modality(merfile, morfile, cell_type='exc', smoothing=False):
     print()
 
 if __name__ == '__main__':
+    '''
     for cell_type in ['exc', 'inh']:
         if cell_type == 'exc':
             merfile = 'EXC_merfish_MTG_mean.csv'
@@ -79,5 +80,9 @@ if __name__ == '__main__':
             merfile = 'INC_merfish_MTG_mean.csv'
             morfile = 'euc_feat_distances_nonpyramidal_nannot2_ihc0_mean.csv'
         cross_modality(merfile, morfile, cell_type=cell_type)
+    '''
+    merfile = '../spatial_transcript_seu/P00083_mean.csv'
+    morfile = 'euc_feat_distances_pyramidal_nannot2_ihc0_mean.csv'
+    cross_modality(merfile, morfile, cell_type='P00083_exc')
 
 
