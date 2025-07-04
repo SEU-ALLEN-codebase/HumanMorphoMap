@@ -12,7 +12,7 @@ import h5py
 from tqdm import tqdm
 import random
 
-from cell2location.utils.filtering import filter_genes
+#from cell2location.utils.filtering import filter_genes
 
 
 def extract_rows_csr_memory_efficient(adata, indices, batch_size=1000):
@@ -72,50 +72,113 @@ def extract_rows_csr_memory_efficient(adata, indices, batch_size=1000):
 
     return csr_mat
 
+def extract_cortex(data_path):
+    # Extract cells
+    input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
+    output_file = os.path.join(data_path, 'cortical_cells_rand30w.h5ad')
+    max_cells = 300000
+    seed = 1024
+
+    # 第一步：确定总细胞数和皮层细胞索引
+    adata_lazy = sc.read_h5ad(input_file, backed='r')
+    is_cortex = adata_lazy.obs.ROIGroup == 'Cerebral cortex'
+    # remove cell types less than 1% of total cells
+    cortex = adata_lazy[is_cortex]
+    clusters, nclusters = np.unique(cortex.obs['supercluster_term'], return_counts=True)
+    count_thresh = 0.01 * cortex.shape[0]
+    is_major_cluster = adata_lazy.obs.supercluster_term.isin(clusters[nclusters > count_thresh])
+    # combine
+    is_good = is_cortex & is_major_cluster
+
+    indices = np.where(is_good)[0]
+    print(indices.shape)
+    
+    print(f'Random sampling {max_cells} cells out of {indices.shape[0]}')
+    random.seed(seed)
+    sel_indices = random.sample(indices.tolist(), max_cells)
+
+
+    # 创建最终的 AnnData 对象
+    data = extract_rows_csr_memory_efficient(adata_lazy, sel_indices, batch_size=40000)
+
+    print('Save as AnnData...')
+    adata_new = sc.AnnData(X=data)  # 自动识别CSR格式
+
+    adata_final = adata_lazy[sel_indices, :]
+    # We could not write adata_final directly, instead we construct a new AnnData object
+
+    adata_new.obs = adata_final.obs.copy()
+    adata_new.var = adata_final.var.copy()
+    adata_new.uns = adata_final.uns.copy()
+    adata_new.obsm = adata_final.obsm.copy()
+
+    adata_new.write(output_file, compression=True)   
+
+    adata_lazy.file.close()
+
+    print(adata_new.X.indptr.shape, adata_new.X.dtype)
+
+
+def extract_by_area(area):
+    # Extract cells
+    input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
+    output_file = os.path.join(data_path, f'sc_{area.split()[-1]}.h5ad')
+
+    # 第一步：确定总细胞数和皮层细胞索引
+    adata_lazy = sc.read_h5ad(input_file, backed='r')
+    is_cortex = adata_lazy.obs.ROIGroup == 'Cerebral cortex'
+    is_area = adata_lazy.obs.roi == area
+    is_target = is_cortex & is_area
+    import ipdb; ipdb.set_trace()
+
+    # remove cell types less than 1% of total cells
+    area_ad = adata_lazy[is_target]
+    clusters, nclusters = np.unique(area_ad.obs['supercluster_term'], return_counts=True)
+    count_thresh = 0.01 * area_ad.shape[0]
+    is_major_cluster = adata_lazy.obs.supercluster_term.isin(clusters[nclusters > count_thresh])
+    # combine
+    is_good = is_target & is_major_cluster
+
+    indices = np.where(is_good)[0]
+    print(indices.shape)
+    
+    max_cells = 300000
+    if indices.shape[0] > max_cells:
+        print(f'Random sampling {max_cells} cells out of {indices.shape[0]}')
+        random.seed(seed)
+        sel_indices = random.sample(indices.tolist(), max_cells)
+    else:
+        sel_indices = indices
+
+
+    # 创建最终的 AnnData 对象
+    data = extract_rows_csr_memory_efficient(adata_lazy, sel_indices, batch_size=10000)
+
+    print('Save as AnnData...')
+    adata_new = sc.AnnData(X=data)  # 自动识别CSR格式
+
+    adata_final = adata_lazy[sel_indices, :]
+    # We could not write adata_final directly, instead we construct a new AnnData object
+
+    adata_new.obs = adata_final.obs.copy()
+    adata_new.var = adata_final.var.copy()
+    adata_new.uns = adata_final.uns.copy()
+    adata_new.obsm = adata_final.obsm.copy()
+
+    adata_new.write(output_file, compression=True)   
+
+    adata_lazy.file.close()
+
+    print(adata_new.X.indptr.shape, adata_new.X.dtype)
 
 if __name__ == '__main__':
     data_path = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/data'
 
-    if 0:
-        # Extract cells
-        input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
-        output_file = os.path.join(data_path, 'cortical_cells_rand30w.h5ad')
-        sel_cells = 300000
-        seed = 1024
-
-        # 第一步：确定总细胞数和皮层细胞索引
-        adata_lazy = sc.read_h5ad(input_file, backed='r')
-        is_cortex = adata_lazy.obs.ROIGroupFine == 'Cerebral cortex'
-        indices = np.where(is_cortex)[0]
-        print(indices.shape)
-        
-        print(f'Random sampling {sel_cells} cells out of {indices.shape[0]}')
-        random.seed(seed)
-        sel_indices = random.sample(indices.tolist(), sel_cells)
-
-
-        # 创建最终的 AnnData 对象
-        data = extract_rows_csr_memory_efficient(adata_lazy, sel_indices, batch_size=40000)
-
-        print('Save as AnnData...')
-        adata_new = sc.AnnData(X=data)  # 自动识别CSR格式
-
-        adata_final = adata_lazy[sel_indices, :]
-        # We could not write adata_final directly, instead we construct a new AnnData object
-
-        adata_new.obs = adata_final.obs.copy()
-        adata_new.var = adata_final.var.copy()
-        adata_new.uns = adata_final.uns.copy()
-        adata_new.obsm = adata_final.obsm.copy()
-
-        adata_new.write(output_file, compression=True)   
-
-        adata_lazy.file.close()
-
-        print(adata_new.X.indptr.shape, adata_new.X.dtype)
-
-
     if 1:
+        #extract_cortex(data_path)
+        extract_by_area(area='Human A44-A45')
+
+    if 0:
         # filter genes
         cortical_h5ad = os.path.join(data_path, 'cortical_cells_rand30w.h5ad')
         cell_count_cutoff = 5
@@ -138,8 +201,8 @@ if __name__ == '__main__':
         )
 
         # filter the object
-        adata_in_sel = adata_in[:, filtered_mask].copy() # #genes = 11,897
+        adata_in_sel = adata_in[:, filtered_mask].copy() # #genes = 11,917
         # save file temporarily
         adata_in_sel.write(filtered_h5ad, compression=True)
-
+        print(f'Number of genes left: {adata_in_sel.shape[1]}')
 

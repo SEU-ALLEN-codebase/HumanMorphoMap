@@ -6,6 +6,7 @@
 import os
 import glob
 import sys
+import random
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -14,6 +15,7 @@ import gc
 from re import sub
 import cell2location
 from cell2location.utils.filtering import filter_genes
+from cell2location.models import Cell2location
 
 from scipy.sparse import csr_matrix
 
@@ -174,8 +176,8 @@ def plot_vis_qc(adata, slides):
             plt.close()
 
 
-def preprocess_scRNA_data(sc_data_file, sc_out_file, visualize=False):
-    adata = sc.read(sc_data_file, backed='r')
+def load_scRNA_data(sc_data_file, visualize=False):
+    adata = sc.read(sc_data_file)
     # Column name containing cell type annotations
     col_name = 'supercluster_term'
     
@@ -191,64 +193,120 @@ def preprocess_scRNA_data(sc_data_file, sc_out_file, visualize=False):
             plt.savefig('scrna.png', dpi=300)
             plt.close()
  
-    adata.var.index.name = 'ENSEMBL'   
-    # filter genes
-    sc.pp.filter_genes(adata, min_cells=5)
-    sc.pp.filter_genes(adata, min_cells=int(0.03*adata.shape[0]))
+    adata.var.index.name = 'ENSEMBL'
 
-    # filtering
+    if 0:
+        # Randomly select a mini-set for debugging
+        n_mini = 10000
+        random.seed(1024)
+        mini_indices = random.sample(range(adata.shape[0]), n_mini)
+        adata_mini = adata[mini_indices].copy()
+        adata_mini.write(f'{sc_data_file[:-5]}_mini{n_mini}.h5ad', compression=True)
 
+    return adata
+
+
+def run_cell2loc(sp_collection_file, sc_data_file, results_folder, debug=False):
+    # preprocessing the spatial data
+    sample_data = pd.read_csv(sp_collection_file)
+
+    print(f'Read the data into anndata objects')
+    slides = []
+    n_slides = 0
+    for sample_name,sample_path in zip(sample_data['sample_name'], sample_data['sample_path']):
+        print(sample_name)
+        slides.append(read_and_qc(sample_name, path=sample_path))
+        
+        n_slides += 1
+        if debug and n_slides >= 2:
+            break
+
+    print('Combine anndata objects together')
+    adata_sp = slides[0].concatenate(
+        slides[1:2] if debug else slides[1:],
+        batch_key="sample",
+        uns_merge="unique",
+        batch_categories=sample_data['sample_name'],
+        index_unique=None
+    )
+
+    print('load the single-cell data')
+    adata_sc = load_scRNA_data(sc_data_file)
+    
+    # training
+    print('Train the model')
     import ipdb; ipdb.set_trace()
-    adata = adata[:, selected].copy()
+    #model = Cell2location(
+    rmodel = cell2location.run_cell2location(
 
-    
-    # Usage 
-    
+        # Single cell reference signatures as pd.DataFrame
+        # (could also be data as anndata object for estimating signatures
+        #  as cluster average expression - `sc_data=adata_snrna_raw`)
+        sc_data=adata_sc,
+        # Spatial data as anndata object
+        sp_data=adata_sp,
 
-    del adata
-    gc.collect()
+        # the column in sc_data.obs that gives cluster idenitity of each cell
+        summ_sc_data_args={'cluster_col': "supercluster_term",
+                           'min_cells_per_cluster': 20,  # 确保稀有神经元亚型不被过滤
+                          },
+
+        train_args={'use_raw': True, # By default uses raw slots in both of the input datasets.
+                    'n_iter': 40000, # Increase the number of iterations if needed (see QC below)
+
+                    # Whe analysing the data that contains multiple experiments,
+                    # cell2location automatically enters the mode which pools information across experiments
+                    'sample_name_col': 'sample'}, # Column in sp_data.obs with experiment ID (see above)
+
+
+        export_args={'path': results_folder, # path where to save results
+                     'run_name_suffix': '', # optinal suffix to modify the name the run
+                     'save_model': True,
+                    },
+
+        model_kwargs={ # Prior on the number of cells, cell types and co-located groups
+
+                      'cell_number_prior': {
+                          # - N - the expected number of cells per location:
+                          'cells_per_spot': 8, # < - change this
+                          # - A - the expected number of cell types per location (use default):
+                          'factors_per_spot': 10,
+                          # - Y - the expected number of co-located cell type groups per location (use default):
+                          'combs_per_spot': 5
+                      },
+
+                       # Prior beliefs on the sensitivity of spatial technology:
+                      'gene_level_prior':{
+                          # Prior on the mean
+                          'mean': 1/2,
+                          # Prior on standard deviation,
+                          # a good choice of this value should be at least 2 times lower that the mean
+                          'sd': 1/6
+                      }
+        }
+    )
+
+    print(f'Model are saved to: {results_folder + runner["run_name"]}')
+    import ipdb; ipdb.set_trace()
+    print()
 
 
 if __name__ == '__main__':
     sp_data_folder = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/'
+    sp_collection_file = 'Visium_seu.csv'
     results_folder = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/cell2loc/'
-    sc_data_file = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/data/cortical_cells.h5ad'
+    sc_data_file = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/data/cortical_cells_rand30w_count5_perc0.15_nonzMean2.0.h5ad'
 
     regression_model_output = 'RegressionGeneBackgroundCoverageTorch'
     reg_path = f'{results_folder}regression_model/{regression_model_output}/'
 
     DEBUG = True
     
-    if 0:   
-        # preprocessing the data
-        sample_data = pd.read_csv('Visium_seu.csv')
-
-        # Read the data into anndata objects
-        slides = []
-        n_slides = 0
-        for sample_name,sample_path in zip(sample_data['sample_name'], sample_data['sample_path']):
-            print(sample_name)
-            slides.append(read_and_qc(sample_name, path=sample_path))
-            
-            n_slides += 1
-            if DEBUG and n_slides >= 2:
-                break
-
-        # Combine anndata objects together
-        adata_vis = slides[0].concatenate(
-            slides[1:2] if DEBUG else slides[1:],
-            batch_key="sample",
-            uns_merge="unique",
-            batch_categories=sample_data['sample_name'],
-            index_unique=None
-        )
-        
-        #plot_vis_qc(adata, slides)
-        print()
-
-    if 1:
-        # load the scRNA data
-        sndata = preprocess_scRNA_data(sc_data_file, None)
+    if DEBUG:
+        n_mini = 10000
+        sc_data_file = f'{sc_data_file[:-5]}_mini{n_mini}.h5ad'
+    
+    run_cell2loc(sp_collection_file, sc_data_file, results_folder, debug=DEBUG)
 
 
 
