@@ -12,7 +12,7 @@ import h5py
 from tqdm import tqdm
 import random
 
-#from cell2location.utils.filtering import filter_genes
+from cell2location.utils.filtering import filter_genes
 
 
 def extract_rows_csr_memory_efficient(adata, indices, batch_size=1000):
@@ -119,17 +119,15 @@ def extract_cortex(data_path):
     print(adata_new.X.indptr.shape, adata_new.X.dtype)
 
 
-def extract_by_area(area):
+def extract_by_area(area, output_file):
     # Extract cells
     input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
-    output_file = os.path.join(data_path, f'sc_{area.split()[-1]}.h5ad')
 
     # 第一步：确定总细胞数和皮层细胞索引
     adata_lazy = sc.read_h5ad(input_file, backed='r')
     is_cortex = adata_lazy.obs.ROIGroup == 'Cerebral cortex'
     is_area = adata_lazy.obs.roi == area
     is_target = is_cortex & is_area
-    import ipdb; ipdb.set_trace()
 
     # remove cell types less than 1% of total cells
     area_ad = adata_lazy[is_target]
@@ -172,25 +170,25 @@ def extract_by_area(area):
     print(adata_new.X.indptr.shape, adata_new.X.dtype)
 
 if __name__ == '__main__':
-    data_path = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/data'
-
-    if 1:
-        #extract_cortex(data_path)
-        extract_by_area(area='Human A44-A45')
+    data_path = 'data/scdata'
+    area = 'Human A44-A45'
+    output_file = os.path.join(data_path, f'sc_{area.split()[-1]}.h5ad')
 
     if 0:
+        #extract_cortex(data_path)
+        extract_by_area(area=area, output_file=output_file)
+
+    if 1:
         # filter genes
-        cortical_h5ad = os.path.join(data_path, 'cortical_cells_rand30w.h5ad')
+        area_h5ad = os.path.join(output_file)
         cell_count_cutoff = 5
         cell_percentage_cutoff = 0.15
         nonz_mean_cutoff = 2.
-        filtered_h5ad = os.path.join(data_path, 
-        f'cortical_cells_rand30w_count{cell_count_cutoff}_perc{cell_percentage_cutoff:.2f}_nonzMean{nonz_mean_cutoff:.1f}.h5ad'
-        )
+        filtered_h5ad = f'{output_file[:-5]}_count{cell_count_cutoff}_perc{cell_percentage_cutoff:.2f}_nonzMean{nonz_mean_cutoff:.1f}.h5ad'
         batch_size = 10000  # genes
 
         print(f'Loading the data...')
-        adata_in = sc.read_h5ad(cortical_h5ad)
+        adata_in = sc.read_h5ad(area_h5ad)
 
         print(f'Filtering...')
         filtered_mask = filter_genes(

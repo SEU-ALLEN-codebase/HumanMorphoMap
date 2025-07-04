@@ -13,9 +13,11 @@ import scanpy as sc
 import anndata
 import gc
 from re import sub
+import torch
 import cell2location
 from cell2location.utils.filtering import filter_genes
-from cell2location.models import Cell2location
+from cell2location.models import RegressionModel
+from cell2location.plt import plot_spatial
 
 from scipy.sparse import csr_matrix
 
@@ -33,6 +35,8 @@ warnings.filterwarnings('ignore')
 os.environ["THEANO_FLAGS"] = 'device=cuda0,floatX=float32,force_device=True'
 # if using the CPU uncomment this:
 #os.environ["THEANO_FLAGS"] = 'device=cpu,floatX=float32,openmp=True,force_device=True
+
+torch.set_float32_matmul_precision('medium')
 
 
 def read_and_qc(sample_name, path=''):
@@ -89,7 +93,7 @@ def select_slide(adata, ss, s_col='sample'):
     r""" This function selects the data for one slide from the spatial anndata object.
 
     :param adata: Anndata object with multiple spatial experiments
-    :param s: name of selected experiment
+    :param ss: name of selected experiment
     :param s_col: column in adata.obs listing experiment name for each location
     """
 
@@ -206,107 +210,215 @@ def load_scRNA_data(sc_data_file, visualize=False):
     return adata
 
 
-def run_cell2loc(sp_collection_file, sc_data_file, results_folder, debug=False):
-    # preprocessing the spatial data
-    sample_data = pd.read_csv(sp_collection_file)
+def run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, debug=False):
+    # Initialize the path
+    regression_model_output = 'model_SC'
+    st_model_output = 'SpatialModel'
+    reg_path = f'{results_folder}{sample_name}/{regression_model_output}'
+    st_path = f'{results_folder}{sample_name}/{st_model_output}'
 
-    print(f'Read the data into anndata objects')
-    slides = []
-    n_slides = 0
-    for sample_name,sample_path in zip(sample_data['sample_name'], sample_data['sample_path']):
-        print(sample_name)
-        slides.append(read_and_qc(sample_name, path=sample_path))
+    os.makedirs(reg_path, exist_ok=True)
+    os.makedirs(st_path, exist_ok=True)
+
+    adata_file_sc = f"{reg_path}/sc.h5ad"
+    adata_file_st = f"{st_path}/st.h5ad"
+
+    if os.path.exists(adata_file_st):
+        adata_sc = sc.read_h5ad(adata_file_sc)
+        adata_st = sc.read_h5ad(adata_file_st)
+        mod = cell2location.models.Cell2location.load(st_path, adata_st)
+    else:
+        if not os.path.exists(adata_file_sc):
+            ################# Single-cell data and model training #################
+            print('load the single-cell data')
+            adata_sc = load_scRNA_data(sc_data_file)
+            
+            # training
+            print('Train the model')
+            # prepare anndate for the regression model
+            RegressionModel.setup_anndata(adata=adata_sc, labels_key='supercluster_term')
+            # create the regression model
+            mod = RegressionModel(adata_sc)
+            # view anndata_setup as a sanity check
+            # mod.view_anndata_setup()
+
+            # train the model
+            #train_epochs_reg = max(5, int(-0.0012 * adata_sc.shape[0] + 412))    # fitted from ([1w,30w], [400,50])
+            #train_epochs_reg = max(5, int(-0.0013 * adata_sc.shape[0] + 413))    # fitted from ([1w,30w], [400,20])
+            train_epochs_reg = 200  # 200 should be enough for region-wise estimation
+            print(f'SC training epochs: {train_epochs_reg}')
+            mod.train(max_epochs=train_epochs_reg)
+            # plot the loss_evaluation
+            sns.lineplot(mod.history['elbo_train'])
+            plt.savefig('train_loss_sc.png', dpi=300); plt.close()
+
+            # export the estimated cell abundance (summary of the posterior distribution)
+            mod.export_posterior(adata_sc, sample_kwargs={'num_samples': 1000, 'batch_size':2500})
+            # save the model
+            mod.save(reg_path, overwrite=True)
+            # save anndate object with results
+            adata_sc.write(adata_file_sc)
+
+        else:
+            adata_sc = sc.read_h5ad(adata_file_sc)
+            mod = cell2location.models.RegressionModel.load(reg_path, adata_sc)
+
         
-        n_slides += 1
-        if debug and n_slides >= 2:
-            break
+        # export estimated expression in each cluster
+        if 'means_per_cluster_mu_fg' in adata_sc.varm.keys():
+            inf_aver = adata_sc.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
+                                            for i in adata_sc.uns['mod']['factor_names']]].copy()
+        else:
+            inf_aver = adata_sc.var[[f'means_per_cluster_mu_fg_{i}'
+                                            for i in adata_sc.uns['mod']['factor_names']]].copy()
+        inf_aver.columns = adata_sc.uns['mod']['factor_names']
+        inf_aver.iloc[0:5, 0:5]
 
-    print('Combine anndata objects together')
-    adata_sp = slides[0].concatenate(
-        slides[1:2] if debug else slides[1:],
-        batch_key="sample",
-        uns_merge="unique",
-        batch_categories=sample_data['sample_name'],
-        index_unique=None
-    )
 
-    print('load the single-cell data')
-    adata_sc = load_scRNA_data(sc_data_file)
+        ############## preprocessing the spatial data #################
+        sample_data = pd.read_csv(st_collection_file)
+        adata_st = read_and_qc(sample_name, path=sample_data['sample_path'][sample_data['sample_name'] == sample_name].iloc[0])
+
+       
+        ############## Prediction #################
+        # find shared genes and subset both anndata and reference signatures
+        intersect = np.intersect1d(adata_st.var_names, inf_aver.index)
+        adata_st = adata_st[:, intersect].copy()
+        inf_aver = inf_aver.loc[intersect, :].copy()
+
+        # prepare anndata for cell2location model
+        cell2location.models.Cell2location.setup_anndata(adata=adata_st)#, batch_key="sample")
+
+        ## create and train the model
+        mod = cell2location.models.Cell2location(
+            adata_st, cell_state_df=inf_aver,
+            # the expected average cell abundance: tissue-dependent
+            # hyper-prior which can be estimated from paired histology:
+            N_cells_per_location=8,
+            # hyperparameter controlling normalisation of
+            # within-experiment variation in RNA detection:
+            detection_alpha=20
+        )
+        #mod.view_anndata_setup() 
+        
+        mod.train(max_epochs=10000,  # 30000
+              # train using full data (batch_size=None)
+              batch_size=None,
+              # use all data points in training because
+              # we need to estimate cell abundance at all locations
+              train_size=1,
+        )
+
+        # plot the ST data training
+        sns.lineplot(mod.history['elbo_train'])
+        plt.savefig('train_loss_st.png', dpi=300); plt.close()
+
+        # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+        adata_st = mod.export_posterior(
+            adata_st, sample_kwargs={'num_samples': 1000, 'batch_size': mod.adata.n_obs}
+        )
+
+        print('Save SP model...')
+        mod.save(st_path, overwrite=True)
+        # Save anndata object with results
+        adata_st.write(adata_file_st)
+
+        #fig = mod.plot_spatial_QC_across_batches()
+        #fig.savefig('spatial_qc.png', dpi=300)
     
-    # training
-    print('Train the model')
-    import ipdb; ipdb.set_trace()
-    #model = Cell2location(
-    rmodel = cell2location.run_cell2location(
 
-        # Single cell reference signatures as pd.DataFrame
-        # (could also be data as anndata object for estimating signatures
-        #  as cluster average expression - `sc_data=adata_snrna_raw`)
-        sc_data=adata_sc,
-        # Spatial data as anndata object
-        sp_data=adata_sp,
+    # Now we use cell2location plotter that allows showing multiple cell types in one panel
+    adata_st.obs[adata_st.uns['mod']['factor_names']] = adata_st.obsm['q05_cell_abundance_w_sf']
+    # select up to 5 clusters
+    topk = 5
+    all_labels, label_cnt = np.unique(adata_sc.obs['supercluster_term'], return_counts=True)
+    cnt_thr = np.sort(label_cnt)[::-1][topk]
+    clust_labels = all_labels[label_cnt > cnt_thr]
+    clust_col = ['' + str(i) for i in clust_labels] # in case column names differ from labels
 
-        # the column in sc_data.obs that gives cluster idenitity of each cell
-        summ_sc_data_args={'cluster_col': "supercluster_term",
-                           'min_cells_per_cluster': 20,  # 确保稀有神经元亚型不被过滤
-                          },
+    print(f'Plotting for sample: {sample_name}')
+    # plot in spatial coordinate
+    with mpl.rc_context({'figure.figsize': (15, 15)}):
+        fig = plot_spatial(
+            adata=adata_st,
+            # labels to show on a plot
+            color=clust_col, labels=clust_labels,
+            show_img=True,
+            # 'fast' (white background) or 'dark_background'
+            style='fast',
+            # limit color scale at 99.2% quantile of cell abundance
+            max_color_quantile=0.992,
+            # size of locations (adjust depending on figure size)
+            circle_diameter=6,
+            colorbar_position='right'
+        )
 
-        train_args={'use_raw': True, # By default uses raw slots in both of the input datasets.
-                    'n_iter': 40000, # Increase the number of iterations if needed (see QC below)
+        fig.savefig(f'{sample_name}_top{topk}labels.png', dpi=300)
 
-                    # Whe analysing the data that contains multiple experiments,
-                    # cell2location automatically enters the mode which pools information across experiments
-                    'sample_name_col': 'sample'}, # Column in sp_data.obs with experiment ID (see above)
+ 
+def get_pyramidal_cells(predicted_st_file, exist_thr=0.5):   
+    # load the cell predictions
+    adata_st = sc.read_h5ad(predicted_st_file)
+    # import and rename
+    cell_names = adata_st.uns['mod']['factor_names']
+    adata_st.obs[cell_names] = adata_st.obsm['q05_cell_abundance_w_sf']
+    # using 
+    mcells05 = adata_st.obs[cell_names].copy()
+    # thresholding to exclude low-probability cells
+    mcells05[mcells05 < exist_thr] = 0
 
+    # map to pyramidal and nonpyramidal
+    # 1. 筛选出存在于DataFrame中的金字塔神经元列（避免KeyError）
+    existing_pyramidal_cols = [col for col in PYRAMIDAL_SUPERCLUSTERS if col in mcells05.columns]
 
-        export_args={'path': results_folder, # path where to save results
-                     'run_name_suffix': '', # optinal suffix to modify the name the run
-                     'save_model': True,
-                    },
+    # 2. 创建新的pyramidal列（对存在的列求和）
+    mcells05['pyramidal'] = mcells05[existing_pyramidal_cols].sum(axis=1)
 
-        model_kwargs={ # Prior on the number of cells, cell types and co-located groups
+    # 3. 创建nonpyramidal列（所有非金字塔神经元列的和）
+    non_pyramidal_cols = [col for col in mcells05.columns if col not in PYRAMIDAL_SUPERCLUSTERS and col != 'pyramidal']
+    mcells05['nonpyramidal'] = mcells05[non_pyramidal_cols].sum(axis=1)
 
-                      'cell_number_prior': {
-                          # - N - the expected number of cells per location:
-                          'cells_per_spot': 8, # < - change this
-                          # - A - the expected number of cell types per location (use default):
-                          'factors_per_spot': 10,
-                          # - Y - the expected number of co-located cell type groups per location (use default):
-                          'combs_per_spot': 5
-                      },
+    # 筛选符合条件的spots
+    filtered_rows_p = mcells05[
+        (mcells05['pyramidal'] > exist_thr) & 
+        (mcells05['pyramidal'] > 2 * mcells05['nonpyramidal'])
+    ]
+    filtered_rows_np = mcells05[
+        (mcells05['nonpyramidal'] > exist_thr) & 
+        (mcells05['nonpyramidal'] > 2 * mcells05['pyramidal'])
+    ]
+    mcells05['cell_code'] = -1
+    mcells05.loc[filtered_rows_p.index, 'cell_code'] = 1
+    mcells05.loc[filtered_rows_np.index, 'cell_code'] = 0
 
-                       # Prior beliefs on the sensitivity of spatial technology:
-                      'gene_level_prior':{
-                          # Prior on the mean
-                          'mean': 1/2,
-                          # Prior on standard deviation,
-                          # a good choice of this value should be at least 2 times lower that the mean
-                          'sd': 1/6
-                      }
-        }
-    )
-
-    print(f'Model are saved to: {results_folder + runner["run_name"]}')
-    import ipdb; ipdb.set_trace()
-    print()
+    # write to file
+    out_path = os.path.split(os.path.split(predicted_st_file)[0])[0]
+    out_file = os.path.join(out_path, 'predicted_cell_types.csv')
+    mcells05.to_csv(out_file)
+    
 
 
 if __name__ == '__main__':
-    sp_data_folder = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/'
-    sp_collection_file = 'Visium_seu.csv'
-    results_folder = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/cell2loc/'
-    sc_data_file = '/data2/lyf/data/transcriptomics/human_scRNA_2023_Science/data/cortical_cells_rand30w_count5_perc0.15_nonzMean2.0.h5ad'
+    st_collection_file = 'Visium_seu.csv'
+    results_folder = './cell2loc/'
+    sample_dict = {
+        'P00083': ('./data/scdata/sc_A44-A45_count5_perc0.15_nonzMean2.0.h5ad', 'cell2loc/P00083/SpatialModel/st.h5ad')
+    }
+    sample_name = 'P00083'
+    sc_data_file, predicted_st_file = sample_dict[sample_name]
 
-    regression_model_output = 'RegressionGeneBackgroundCoverageTorch'
-    reg_path = f'{results_folder}regression_model/{regression_model_output}/'
-
-    DEBUG = True
+    DEBUG = False
     
     if DEBUG:
         n_mini = 10000
         sc_data_file = f'{sc_data_file[:-5]}_mini{n_mini}.h5ad'
     
-    run_cell2loc(sp_collection_file, sc_data_file, results_folder, debug=DEBUG)
+    if 0:
+        # Train the model and predict the posterior cell types
+        run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, debug=DEBUG)
 
+    if 1:
+        # extract spots mostly with pyramdial cells
+        get_pyramidal_cells(predicted_st_file)
 
 

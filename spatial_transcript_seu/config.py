@@ -26,3 +26,12 @@ PYRAMIDAL_SUPERCLUSTERS = (
     'Deep-layer intratelencephalic'
 )
 
+#### ANNOTATED Anchor points, (W, H)
+LAYER_ANCHORS = {
+    'P00083': {
+        'L2-L3': ((913,1516), (1923,497)),
+        'L5-L6': ((1253,1519), (1885,862))
+    }
+}
+
+

@@ -15,7 +15,7 @@ from config import LAYER_CODES, LAYER_CODES_REV
 
 
 def get_rotation_angles(rotation_file=
-        '/data2/lyf/data/transcriptomics/ST_SEU/rotate_angles_of_layer_annotation.csv'):
+        'data/ST-raw/rotate_angles_of_layer_annotation.csv'):
     rotations = pd.read_csv(rotation_file, index_col=0)
     return rotations
 
@@ -115,6 +115,7 @@ def get_layer_masks(sample_dir, annot_dir, rot_angle):
     cv2.imwrite(os.path.join(annot_dir, f'concated_mask.png'), img_concat)
     # save the mask_file
     cv2.imwrite(os.path.join(annot_dir, 'layer_mask.png'), filled_mask_ch1)
+    cv2.imwrite(os.path.join(annot_dir, 'layer_mask_mul25.png'), filled_mask_ch1*25)
 
     return filled_mask_ch1
 
@@ -192,15 +193,15 @@ def assign_layers_to_spots(layer_file, spots_file, visual_check=False, save=True
 
 if __name__ == '__main__':
     sample_id = 'P00083'
-    sample_dir = f'/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data/{sample_id}'
-    annot_dir = f'/data2/lyf/data/transcriptomics/ST_SEU/{sample_id}/layers'
-    spots_file = f'./data/spatial_adata_{sample_id}.h5ad'
+    sample_dir = f'data/ST-raw/{sample_id}'
+    annot_dir = f'data/ST-raw/{sample_id}/layers'
+    spots_file = f'data/layers/spatial_adata_{sample_id}.h5ad'
     
     rotations = get_rotation_angles()   # rotation angles counter-clockwise
     rot_angle = rotations.loc[sample_id].values[0]
 
     get_layer_masks(sample_dir, annot_dir, rot_angle)
-    if 1:
+    if 0:
         layer_file = os.path.join(annot_dir, 'layer_mask.png')
         assign_layers_to_spots(layer_file, spots_file, visual_check=True)
 
