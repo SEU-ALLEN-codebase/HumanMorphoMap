@@ -11,7 +11,8 @@ import pandas as pd
 from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from sklearn.preprocessing import StandardScaler
+from sklearn.mixture import GaussianMixture
 
 from swc_handler import parse_swc, write_swc
 from morph_topo import morphology
@@ -100,7 +101,13 @@ class StemFeatures:
             median_radius = np.median(radii)
             radii_dict[bt] = median_radius
 
-        return radii_dict
+        # estimate relative radius
+        avg_rad = np.mean([*radii_dict.values()])
+        wradii_dict = {}
+        for bt, btv in radii_dict.items():
+            wradii_dict[bt] = btv / avg_rad
+
+        return radii_dict, wradii_dict
 
     def _median_intensity(self, imgfile):   # The function is intense, as it requires image loading, implement later
         img = load_image(imgfile)
@@ -174,7 +181,7 @@ class StemFeatures:
         # find out stem with minimal angle
         min_angle_values = cosine_sim.max(axis=1)
         # how many stems with small angles
-        count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)   # < 30 deg
+        count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)   # < 45 deg
         result = pd.DataFrame({
             'min_cos_similarity': min_angle_values,
             'count_above_0.707': count_above_threshold
@@ -184,13 +191,14 @@ class StemFeatures:
 
     
     def calc_features(self):
-        rad_dict = self._median_radius()
+        rad_dict, wrad_dict = self._median_radius()
         euc_dict = self._euclidean_length()
         path_dict = self._path_length()
         str_dict = self._straightness(euc_dict, path_dict)
         dfvn = self._angles()
         # merge to the dataframe
-        dfvn['radius'] = pd.Series(rad_dict)  
+        #dfvn['radius'] = pd.Series(rad_dict)
+        dfvn['wradius'] = pd.Series(wrad_dict)
         dfvn['euc_distance'] = pd.Series(euc_dict)
         dfvn['straightness'] = pd.Series(str_dict)  
 
@@ -208,7 +216,9 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         
             sf = StemFeatures(swcfile)
             features = sf.calc_features()
-            features['name'] = swc_name
+            #features['name'] = swc_name
+            ids = [f'{swc_name}_{sid}' for sid in features.index]
+            features.index = ids
             dfs.append(features)
 
         # merge all dataframes
@@ -237,6 +247,7 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
             'min_cos_similarity': (-1, 1),
             'count_above_0.707': (0, 5),
             'radius': (0, 15),
+            'wradius': (0, 5),
             'euc_distance': (0, 200),
             'straightness': (0.5, 1)
         }
@@ -260,29 +271,143 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         for j in range(i + 1, len(axes)):
             axes[j].set_visible(False)
 
-        plt.tight_layout()
+        #plt.tight_layout()
         plt.savefig(f'feature_distribution_{out_csv}.png', dpi=300)
 
     return merged_df
     
+# 2. 基于BIC选择最佳n_components
+def select_best_components(data, max_components=80):
+    """自动选择最佳GMM组件数量"""
+    bic_values = []
+    n_components_range = range(1, max_components+1)
     
-def calc
+    for n in n_components_range:
+        print(f'--> current n_components={n}')
+        gmm = GaussianMixture(n_components=n, 
+                             covariance_type='diag',
+                             random_state=1024)
+        gmm.fit(data)
+        bic_values.append(gmm.bic(data))
+    
+    # 可视化BIC曲线
+    sns.set_theme(style='ticks', font_scale=1.6)
+    plt.plot(n_components_range, bic_values, 'o-')
+    plt.xlim(0, max_components)
+    plt.ylim(-6.5e4,5e4)
+    plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+    plt.xlabel('Number of Components')
+    plt.ylabel('BIC Score')
+    plt.subplots_adjust(bottom=0.15)
+    plt.title('BIC for GMM Model Selection')
+    plt.savefig('gmm_bic.png', dpi=300)
+    plt.close()
+    
+    best_n = np.argmin(bic_values) + 1  # +1因为从0开始索引
+    print(f"自动选择的最佳组件数: {best_n}")
+    return best_n
+
+   
+def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
+    # load the features
+    feats_h01 = pd.read_csv(h01_feat_file, index_col=0)
+    feats_auto = pd.read_csv(auto_feat_file, index_col=0)
+    
+    # train-testing the model on h01
+    # 1. 数据标准化
+    scaler = StandardScaler()
+    feats_h01_scaled = scaler.fit_transform(feats_h01)  # Gold standard (A)
+    feats_auto_scaled = scaler.transform(feats_auto)    # 自动重建数据 (B)
+
+    if best_n is None:
+        best_n = select_best_components(feats_h01_scaled)  # 仅在A上选择
+    else:
+        print(f'Using the estimated best n_components: {best_n}')
+
+    # 3. 训练GMM模型
+    gmm = GaussianMixture(n_components=best_n,
+                         covariance_type='diag',
+                         random_state=1024)
+    gmm.fit(feats_h01_scaled)  # 仅在A上训练
+
+    # 4. 计算异常分数 (负对数似然)
+    auto_scores = -gmm.score_samples(feats_auto_scaled)  # 值越大越异常
+    
+    # 5. 自动确定异常阈值 (基于A的分布)
+    threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)  # 使用A的95百分位
+    print(f"自动计算的异常阈值: {threshold:.4f}")
+
+    # 6. 标记异常点
+    auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
+
+    
+    visualize = False
+    if visualize:
+        sns.set_theme(style='ticks', font_scale=1.6)
+        plt.figure(figsize=(8, 6))
+        # 创建明确的分组标签数组
+        hue_labels = np.where(auto_scores > threshold, 'Anomaly', 'Normal')
+
+        # 使用双颜色区分正常/异常区域
+        ax = sns.histplot(x=auto_scores, 
+                         bins=80, 
+                         kde=True,
+                         hue=hue_labels,  # 使用标签数组而不是布尔条件
+                         palette={'Normal': 'skyblue', 'Anomaly': 'tomato'},
+                         edgecolor='white',
+                         linewidth=0.5)
+
+        # 标记阈值线
+        threshold_line = ax.axvline(threshold, color='darkred', linestyle='--', linewidth=2)
+
+        # 添加图例
+        from matplotlib.lines import Line2D
+        legend_elements = [Line2D([0], [0], color='skyblue', lw=4, label='Normal'),
+                           Line2D([0], [0], color='tomato', lw=4, label='Anomaly'),
+                           threshold_line]
+        ax.legend(handles=legend_elements, loc='upper right', frameon=False)
+
+        # 添加统计标注
+        ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
+                    xy=(threshold, 0),
+                    xytext=(threshold*1.1, ax.get_ylim()[1]*0.7),
+                    arrowprops=dict(arrowstyle='->'),
+                    bbox=dict(boxstyle='round', fc='white'))
+
+        # 格式调整
+        ax.set(xlabel='Anomaly Score', 
+               ylabel='Density',
+               title='Anomaly Score Distribution')
+        sns.despine()
+        plt.xlim(-15, 25)
+        plt.tight_layout()
+        plt.savefig('gmm_predicted.png', dpi=300)
+        plt.close()
 
 
+    # 7. 结果分析
+    print(f"检测到异常点比例: {auto_labels.mean():.2%}")
+    print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
 
-
+    return auto_labels
+        
 
 if __name__ == '__main__':
 
-    dataset = 'h01'
-    if dataset == 'h01':
-        h01_dir = './data/H01_resample1um_prune25um'
-        h01_feat_file = 'h01_stem_features.csv'
-    else:
-        h01_dir = './data/auto8.4k_0510_pruned_resample1um' 
-        h01_feat_file = 'auto8.4k_0510_pruned_resamnple1um_stem_features.csv'
-    
-    calc_features_all(h01_dir, out_csv=h01_feat_file)
+    h01_dir = './data/H01_resample1um_prune25um'
+    h01_feat_file = 'h01_stem_features.csv'
+    auto_dir = './data/auto8.4k_0510_pruned_resample1um' 
+    auto_feat_file = 'auto8.4k_0510_pruned_resample1um_stem_features.csv'
 
+    if 0:
+        dataset = 'auto'
+        if dataset == 'h01':
+            calc_features_all(h01_dir, out_csv=h01_feat_file)
+        else:
+            calc_features_all(auto_dir, out_csv=auto_feat_file)
+    
+    if 1:
+        best_n = None # estimated using `select_best_components`
+        detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=best_n)
     
 
