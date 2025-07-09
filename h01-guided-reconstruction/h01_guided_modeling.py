@@ -17,6 +17,10 @@ from sklearn.mixture import GaussianMixture
 from swc_handler import parse_swc, write_swc
 from morph_topo import morphology
 
+from merge_stems import SWCPruneByStems
+
+_USE_FEATURES = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']
+
 
 class StemFeatures:
     '''
@@ -184,7 +188,8 @@ class StemFeatures:
         count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)   # < 45 deg
         result = pd.DataFrame({
             'min_cos_similarity': min_angle_values,
-            'count_above_0.707': count_above_threshold
+            'count_above_0.707': count_above_threshold,
+            'nearest_idx': cosine_sim.index[np.argmax(cosine_sim, axis=1)],
         })
         
         return result
@@ -197,10 +202,14 @@ class StemFeatures:
         str_dict = self._straightness(euc_dict, path_dict)
         dfvn = self._angles()
         # merge to the dataframe
-        #dfvn['radius'] = pd.Series(rad_dict)
+        dfvn['radius'] = pd.Series(rad_dict)
         dfvn['wradius'] = pd.Series(wrad_dict)
         dfvn['euc_distance'] = pd.Series(euc_dict)
         dfvn['straightness'] = pd.Series(str_dict)  
+
+        # I would prefer to use the first node of each primary branch, rather than the end node
+        dfvn.index = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.index]
+        dfvn.nearest_idx = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.nearest_idx]
 
         return dfvn
 
@@ -216,10 +225,11 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         
             sf = StemFeatures(swcfile)
             features = sf.calc_features()
-            #features['name'] = swc_name
             ids = [f'{swc_name}_{sid}' for sid in features.index]
             features.index = ids
+            
             dfs.append(features)
+
 
         # merge all dataframes
         merged_df = pd.concat(dfs)
@@ -231,11 +241,11 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         绘制DataFrame中所有特征的分布（每个特征一个子图）。
         """
         # 获取需要绘制的特征列
-        features = [col for col in merged_df.columns if col not in ['stem_id', 'name']]
+        features = [col for col in merged_df.columns if col not in ['stem_id', 'name', 'nearest_idx']]
         n_features = len(features)
         
         # 计算子图的行数
-        n_cols = 5
+        n_cols = 3
         n_rows = ((n_features - 1)// n_cols) + 1
         
         # 创建图形和子图网格
@@ -467,12 +477,13 @@ def plot_label_diff(feats_auto):
 
 
 
-def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
-    use_features = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']   # n=38, instead of 55 for 5 features
-
+def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None):
     # load the features
-    feats_h01 = pd.read_csv(h01_feat_file, index_col=0)[use_features]
-    feats_auto = pd.read_csv(auto_feat_file, index_col=0)[use_features]
+    feats_h01_orig = pd.read_csv(h01_feat_file, index_col=0)
+    feats_auto_orig = pd.read_csv(auto_feat_file, index_col=0)
+
+    feats_h01 = feats_h01_orig[_USE_FEATURES]
+    feats_auto = feats_auto_orig[_USE_FEATURES]
 
     # train-testing the model on h01
     # 1. 数据标准化
@@ -502,17 +513,42 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
         
         # 6. 标记异常点
         auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
-    
+
+        
         # 7. 结果分析
-        print(f"检测到异常点比例: {auto_labels.mean():.2%}")
+        anomaly_pct = auto_labels.mean()
+        print(f"检测到异常点比例: {anomaly_pct:.2%}")
         print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
 
-        anomaly_pct = 1.0 * (auto_labels == 1) / len(auto_labels)
-
-
         # find out the branch with the largest score in each neuron
+        tmp_df = feats_auto_orig.copy()
+        tmp_df['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
+        tmp_df['label'] = auto_labels
+        tmp_df['score'] = auto_scores
+        
+        # 1. 找出所有包含至少一个 label==1 的 neuron
+        neurons_with_label1 = tmp_df[tmp_df['label'] == 1]['neuron'].unique()
+
+        # 2. 在这些 neuron 中，找到每个 neuron 的 score 最大的行
+        tmp_df1 = tmp_df[
+            tmp_df['neuron'].isin(neurons_with_label1)
+        ]
+        max_score_rows = tmp_df1.loc[
+            tmp_df1.groupby('neuron')['score'].idxmax()
+        ]
         
         # do merging or removation of the anomaly branches
+        for irow, row in max_score_rows.iterrows():
+            itree = int(irow.split('_')[-1])    # index for current subtree node
+            itree_partner = row.nearest_idx     # index for the partner subtree
+
+            # load the swc
+            swc_file = f'{os.path.join(swc_dir, row.neuron)}.swc'
+            tree = parse_swc(swc_file)
+
+            # Merge
+            pruner = SWCPruneByStems(tree)
+            pruner._merge_subtrees(itree, itree_partner)
 
         # re-estimate the features
 
@@ -521,16 +557,16 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
         break
 
     
-    visualize = True
+    visualize = False
     if visualize:
         # overall score distribution
         plot_outlier_distribution(auto_scores, threshold)
     
+        # estimate the statistics
+        feats_auto['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
         # proportion vs. branch count
         feats_auto['label'] = auto_labels
-        feats_auto['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
 
-        # estimate the statistics
         proportion_df = (
             feats_auto.groupby('neuron')['label']
             .agg(
@@ -564,6 +600,6 @@ if __name__ == '__main__':
     
     if 1:
         best_n = 38 # estimated using `select_best_components` # 55
-        detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=best_n)
+        detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
 
