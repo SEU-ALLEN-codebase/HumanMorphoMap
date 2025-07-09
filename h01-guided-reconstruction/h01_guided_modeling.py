@@ -307,7 +307,113 @@ def select_best_components(data, max_components=80):
     print(f"自动选择的最佳组件数: {best_n}")
     return best_n
 
-   
+def plot_outlier_distribution(auto_scores, threshold):
+    sns.set_theme(style='ticks', font_scale=1.6)
+    plt.figure(figsize=(8, 6))
+    # 创建明确的分组标签数组
+    hue_labels = np.where(auto_scores > threshold, 'Anomaly', 'Normal')
+
+    ###### helper function ########
+    def make_aligned_bins(scores, threshold, n_bins=50):
+        """生成与threshold对齐的分箱边界"""
+        min_val = np.min(scores)
+        max_val = np.max(scores)
+        
+        # 计算threshold两侧需要的bin数量比例
+        left_ratio = (threshold - min_val) / (max_val - min_val)
+        right_ratio = 1 - left_ratio
+        
+        # 计算两侧的实际bin数（保持总数≈n_bins）
+        left_bins = max(1, int(np.round(n_bins * left_ratio)))
+        right_bins = max(1, int(np.round(n_bins * right_ratio)))
+        
+        # 生成分段线性分箱
+        left_edges = np.linspace(min_val, threshold, left_bins + 1)
+        right_edges = np.linspace(threshold, max_val, right_bins + 1)
+        
+        # 合并并去重（threshold会出现在两个数组中）
+        return np.unique(np.concatenate([left_edges, right_edges]))
+    
+
+    # 使用示例
+    aligned_bins = make_aligned_bins(auto_scores, threshold, n_bins=80)
+
+    # 绘制直方图
+    ax = sns.histplot(x=auto_scores,
+                     bins=aligned_bins,
+                     kde=True,
+                     hue=hue_labels,
+                     palette={'Normal': 'skyblue', 'Anomaly': 'tomato'},
+                     edgecolor='white',
+                     linewidth=0.5)
+
+    # 标记阈值线
+    threshold_line = ax.axvline(threshold, color='darkred', linestyle='--', linewidth=2)
+
+    # 添加图例
+    from matplotlib.lines import Line2D
+    legend_elements = [Line2D([0], [0], color='skyblue', lw=4, label='Normal'),
+                       Line2D([0], [0], color='tomato', lw=4, label='Anomaly'),
+                       threshold_line]
+    ax.legend(handles=legend_elements, loc='upper right', frameon=False)
+
+    # 添加统计标注
+    ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
+                xy=(threshold, 0),
+                xytext=(threshold*1.1, ax.get_ylim()[1]*0.7))#,
+                #arrowprops=dict(arrowstyle='->'),
+                #bbox=dict(boxstyle='round', fc='white'))
+
+    # 格式调整
+    ax.set(xlabel='Anomaly Score', 
+           ylabel='Density',
+           title='Anomaly Score Distribution')
+    sns.despine()
+    plt.xlim(-15, 25)
+    plt.tight_layout()
+    plt.savefig('gmm_predicted.png', dpi=300)
+    plt.close()
+
+def plot_outlier_statis(proportion_df):
+    sns.set_theme(style='ticks', font_scale=1.6)
+        
+    # 绘制直方图
+    plt.figure(figsize=(10, 6))
+    sns.histplot(proportion_df['proportion_label_1'], bins=20, kde=False, color='skyblue', edgecolor='black')
+
+    # 添加标题和标签
+    plt.title('Distribution of proportion_label_1 (label=1 proportion per neuron)')
+    plt.xlabel('Proportion of stems with label=1')
+    plt.ylabel('Number of neurons')
+    plt.savefig('t0.png', dpi=300)
+    plt.close()
+
+
+    # 计算二维密度
+    heatmap_data = proportion_df.pivot_table(
+        index='stem_count', 
+        columns='proportion_label_1', 
+        aggfunc='size',
+        fill_value=0
+    )
+    # should normalize by each column
+    heatmap_data_normalized = heatmap_data.div(heatmap_data.sum(axis=1), axis=0)
+
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(
+        heatmap_data_normalized,
+        cmap='viridis',
+        cbar_kws={'label': 'Number of Neurons'}
+    )
+
+    plt.title('Heatmap: stem_count vs. proportion_label_1')
+    plt.xlabel('Proportion of label=1')
+    plt.ylabel('Stem Count')
+
+    plt.savefig('t1.png', dpi=300)
+    plt.close()
+
+
 def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
     # load the features
     feats_h01 = pd.read_csv(h01_feat_file, index_col=0)
@@ -329,147 +435,56 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
                          covariance_type='diag',
                          random_state=1024)
     gmm.fit(feats_h01_scaled)  # 仅在A上训练
-
-    # 4. 计算异常分数 (负对数似然)
-    auto_scores = -gmm.score_samples(feats_auto_scaled)  # 值越大越异常
-    
     # 5. 自动确定异常阈值 (基于A的分布)
     threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)  # 使用A的95百分位
     print(f"自动计算的异常阈值: {threshold:.4f}")
+   
+    # Do iterative filtering
+    anomaly_pct = 1.0
+    while anomaly_pct > 0.05:
+        # 4. 计算异常分数 (负对数似然)
+        auto_scores = -gmm.score_samples(feats_auto_scaled)  # 值越大越异常
+        
+        # 6. 标记异常点
+        auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
+    
+        # 7. 结果分析
+        print(f"检测到异常点比例: {auto_labels.mean():.2%}")
+        print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
 
-    # 6. 标记异常点
-    auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
+        anomaly_pct = 1.0 * (auto_labels == 1) / len(auto_labels)
+        # find out the branch with the largest score in each neuron
+        
+        # do merging or removation of the anomaly branches
+
+        # re-estimate the features
+
+        # normalization
+
+        break
 
     
     visualize = True
     if visualize:
-        sns.set_theme(style='ticks', font_scale=1.6)
-        plt.figure(figsize=(8, 6))
-        # 创建明确的分组标签数组
-        hue_labels = np.where(auto_scores > threshold, 'Anomaly', 'Normal')
+        # overall score distribution
+        plot_outlier_distribution(auto_scores, threshold)
+    
+        # proportion vs. branch count
+        feats_auto['label'] = auto_labels
+        feats_auto['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
 
-        ###### helper function ########
-        def make_aligned_bins(scores, threshold, n_bins=50):
-            """生成与threshold对齐的分箱边界"""
-            min_val = np.min(scores)
-            max_val = np.max(scores)
-            
-            # 计算threshold两侧需要的bin数量比例
-            left_ratio = (threshold - min_val) / (max_val - min_val)
-            right_ratio = 1 - left_ratio
-            
-            # 计算两侧的实际bin数（保持总数≈n_bins）
-            left_bins = max(1, int(np.round(n_bins * left_ratio)))
-            right_bins = max(1, int(np.round(n_bins * right_ratio)))
-            
-            # 生成分段线性分箱
-            left_edges = np.linspace(min_val, threshold, left_bins + 1)
-            right_edges = np.linspace(threshold, max_val, right_bins + 1)
-            
-            # 合并并去重（threshold会出现在两个数组中）
-            return np.unique(np.concatenate([left_edges, right_edges]))
-        
-
-        # 使用示例
-        aligned_bins = make_aligned_bins(auto_scores, threshold, n_bins=80)
-
-        # 绘制直方图
-        ax = sns.histplot(x=auto_scores,
-                         bins=aligned_bins,
-                         kde=True,
-                         hue=hue_labels,
-                         palette={'Normal': 'skyblue', 'Anomaly': 'tomato'},
-                         edgecolor='white',
-                         linewidth=0.5)
-
-        # 标记阈值线
-        threshold_line = ax.axvline(threshold, color='darkred', linestyle='--', linewidth=2)
-
-        # 添加图例
-        from matplotlib.lines import Line2D
-        legend_elements = [Line2D([0], [0], color='skyblue', lw=4, label='Normal'),
-                           Line2D([0], [0], color='tomato', lw=4, label='Anomaly'),
-                           threshold_line]
-        ax.legend(handles=legend_elements, loc='upper right', frameon=False)
-
-        # 添加统计标注
-        ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
-                    xy=(threshold, 0),
-                    xytext=(threshold*1.1, ax.get_ylim()[1]*0.7))#,
-                    #arrowprops=dict(arrowstyle='->'),
-                    #bbox=dict(boxstyle='round', fc='white'))
-
-        # 格式调整
-        ax.set(xlabel='Anomaly Score', 
-               ylabel='Density',
-               title='Anomaly Score Distribution')
-        sns.despine()
-        plt.xlim(-15, 25)
-        plt.tight_layout()
-        plt.savefig('gmm_predicted.png', dpi=300)
-        plt.close()
-
-
-    # 7. 结果分析
-    print(f"检测到异常点比例: {auto_labels.mean():.2%}")
-    print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
-
-    # save to file
-    feats_auto['label'] = auto_labels
-    feats_auto['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
-
-    # estimate the statistics
-    proportion_df = (
-        feats_auto.groupby('neuron')['label']
-        .agg(
-            proportion_label_1=lambda x: (x == 1).sum(),  # 计算比例
-            branch_count='count'                           # 计算分支数量
-        )
-        .reset_index()
-    )
-    # visualization
-    if 0:
-        sns.set_theme(style='ticks', font_scale=1.6)
-        
-        # 绘制直方图
-        plt.figure(figsize=(10, 6))
-        sns.histplot(proportion_df['proportion_label_1'], bins=20, kde=False, color='skyblue', edgecolor='black')
-
-        # 添加标题和标签
-        plt.title('Distribution of proportion_label_1 (label=1 proportion per neuron)')
-        plt.xlabel('Proportion of branches with label=1')
-        plt.ylabel('Number of neurons')
-        plt.savefig('t0.png', dpi=300)
-        plt.close()
-
-    if 1:
-        sns.set_theme(style='ticks', font_scale=1.6)
-
-        # 计算二维密度
-        heatmap_data = proportion_df.pivot_table(
-            index='branch_count', 
-            columns='proportion_label_1', 
-            aggfunc='size',
-            fill_value=0
-        )
-        # should normalize by each column
-        heatmap_data_normalized = heatmap_data.div(heatmap_data.sum(axis=1), axis=0)
-
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(
-            heatmap_data_normalized,
-            cmap='viridis',
-            cbar_kws={'label': 'Number of Neurons'}
+        # estimate the statistics
+        proportion_df = (
+            feats_auto.groupby('neuron')['label']
+            .agg(
+                proportion_label_1=lambda x: (x == 1).sum(),  # 计算比例
+                branch_count='count'                           # 计算分支数量
+            )
+            .reset_index()
         )
 
-        plt.title('Heatmap: branch_count vs. proportion_label_1')
-        plt.xlabel('Proportion of label=1')
-        plt.ylabel('Branch Count')
-
-        plt.savefig('t1.png', dpi=300)
-        plt.close()
-
-
+        plot_outlier_statis(proportion_df)
+    
     return feats_auto
         
 
