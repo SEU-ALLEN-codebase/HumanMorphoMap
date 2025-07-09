@@ -294,7 +294,7 @@ def select_best_components(data, max_components=80):
     sns.set_theme(style='ticks', font_scale=1.6)
     plt.plot(n_components_range, bic_values, 'o-')
     plt.xlim(0, max_components)
-    plt.ylim(-6.5e4,5e4)
+    plt.ylim(-7e4,5e4)
     plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
     plt.xlabel('Number of Components')
     plt.ylabel('BIC Score')
@@ -413,12 +413,67 @@ def plot_outlier_statis(proportion_df):
     plt.savefig('t1.png', dpi=300)
     plt.close()
 
+def plot_label_diff(feats_auto):
+    # 筛选特征列
+    features = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']
+
+    # 按 label 分组计算统计量
+    stats = feats_auto.groupby('label')[features].agg(['mean', 'std', 'median', 'min', 'max'])
+
+    print(stats)
+
+    plt.figure(figsize=(12, 8))
+    for i, feature in enumerate(features, 1):
+        plt.subplot(2, 2, i)
+        sns.violinplot(x='label', y=feature, data=feats_auto, palette='muted', split=True)
+        plt.title(f'Violin Plot of {feature}')
+
+    plt.tight_layout()
+    plt.savefig('t2.png', dpi=300)
+    plt.close()
+
+    # statistical testing
+    from scipy.stats import mannwhitneyu
+    label0_data = feats_auto[feats_auto['label'] == 0]['min_cos_similarity']
+    label1_data = feats_auto[feats_auto['label'] == 1]['min_cos_similarity']
+
+    u_stat, p_value = mannwhitneyu(label0_data, label1_data)
+    print(f'Mann-Whitney U test: U={u_stat:.3f}, p={p_value:.4f}')
+
+
+    results = []
+    for feature in features:
+        label0 = feats_auto[feats_auto['label'] == 0][feature]
+        label1 = feats_auto[feats_auto['label'] == 1][feature]
+        
+        # 计算均值和标准差
+        mean0, mean1 = label0.mean(), label1.mean()
+        std0, std1 = label0.std(), label1.std()
+        
+        # 统计检验（这里用 Mann-Whitney U）
+        _, p_value = mannwhitneyu(label0, label1)
+        
+        results.append({
+            'feature': feature,
+            'mean_label0': f'{mean0:.3f} ± {std0:.3f}',
+            'mean_label1': f'{mean1:.3f} ± {std1:.3f}',
+            'p_value': p_value
+        })
+
+    results_df = pd.DataFrame(results)
+    print(results_df)
+
+    return results_df
+
+
 
 def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
+    use_features = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']   # n=38, instead of 55 for 5 features
+
     # load the features
-    feats_h01 = pd.read_csv(h01_feat_file, index_col=0)
-    feats_auto = pd.read_csv(auto_feat_file, index_col=0)
-    
+    feats_h01 = pd.read_csv(h01_feat_file, index_col=0)[use_features]
+    feats_auto = pd.read_csv(auto_feat_file, index_col=0)[use_features]
+
     # train-testing the model on h01
     # 1. 数据标准化
     scaler = StandardScaler()
@@ -453,6 +508,8 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
         print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
 
         anomaly_pct = 1.0 * (auto_labels == 1) / len(auto_labels)
+
+
         # find out the branch with the largest score in each neuron
         
         # do merging or removation of the anomaly branches
@@ -478,12 +535,15 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=None):
             feats_auto.groupby('neuron')['label']
             .agg(
                 proportion_label_1=lambda x: (x == 1).sum(),  # 计算比例
-                branch_count='count'                           # 计算分支数量
+                stem_count='count'                           # 计算分支数量
             )
             .reset_index()
         )
 
+        # Evaluate the statistics of outliers
         plot_outlier_statis(proportion_df)
+
+        plot_label_diff(feats_auto)
     
     return feats_auto
         
@@ -503,7 +563,7 @@ if __name__ == '__main__':
             calc_features_all(auto_dir, out_csv=auto_feat_file)
     
     if 1:
-        best_n = 55 # estimated using `select_best_components`
+        best_n = 38 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, best_n=best_n)
     
 
