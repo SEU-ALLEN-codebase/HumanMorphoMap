@@ -165,17 +165,17 @@ class SWCPruneByStems:
         to_remove_nodes = set(self.primary_branches[itree][:idx_tree])
         merges = {donor_id: receptor_id}
 
-        print(f"First point outside soma in branch1: index {idx_tree} / {len(pbcoords1)}")
-        print(f"First point outside soma in branch2: index {idx_partner} / {len(pbcoords2)}")
+        #print(f"First point outside soma in branch1: index {idx_tree} / {len(pbcoords1)}")
+        #print(f"First point outside soma in branch2: index {idx_partner} / {len(pbcoords2)}")
 
         return merges, to_remove_nodes
 
 
     def _merge_subtrees(self, itree, itree_partner):
-        print(f'#stems before merging: {len(self.subtrees)}')
+        #print(f'#stems before and after merging: {len(self.subtrees)}', end=' --> ')
         merged, to_remove_nodes = self.get_primary_node_merges(itree, itree_partner)
         self._merge_and_remove_nodes(merged, to_remove_nodes)
-        print(f'#stems after merging: {len(self.subtrees)}')
+        #print(f'{len(self.subtrees)}')
 
         return self.morph.tree
         

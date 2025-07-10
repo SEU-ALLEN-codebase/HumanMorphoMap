@@ -480,63 +480,47 @@ def plot_label_diff(feats_auto):
 
 
 
-def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None):
-    # load the features
-    feats_h01_orig = pd.read_csv(h01_feat_file, index_col=0)
+def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, max_iter=10):
+    # 1. 加载数据
+    feats_h01 = pd.read_csv(h01_feat_file, index_col=0)[_USE_FEATURES]
     feats_auto_orig = pd.read_csv(auto_feat_file, index_col=0)
 
-    feats_h01 = feats_h01_orig[_USE_FEATURES]
-    feats_auto = feats_auto_orig[_USE_FEATURES]
-
-    # train-testing the model on h01
-    # 1. 数据标准化
+    # 2. 标准化（基于h01数据）
     scaler = StandardScaler()
-    feats_h01_scaled = scaler.fit_transform(feats_h01)  # Gold standard (A)
-    feats_auto_scaled = scaler.transform(feats_auto)    # 自动重建数据 (B)
-
-    if best_n is None:
-        best_n = select_best_components(feats_h01_scaled)  # 仅在A上选择
-    else:
-        print(f'Using the estimated best n_components: {best_n}')
-
-    # 3. 训练GMM模型
-    gmm = GaussianMixture(n_components=best_n,
-                         covariance_type='diag',
-                         random_state=1024)
-    gmm.fit(feats_h01_scaled)  # 仅在A上训练
-    # 5. 自动确定异常阈值 (基于A的分布)
-    threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)  # 使用A的95百分位
-    print(f"自动计算的异常阈值: {threshold:.4f}")
-   
-    # 4. 计算异常分数 (负对数似然)
-    auto_scores = -gmm.score_samples(feats_auto_scaled)  # 值越大越异常
+    feats_h01_scaled = scaler.fit_transform(feats_h01)
     
-    # 6. 标记异常点
-    auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
-
-    # 7. 结果分析
-    anomaly_pct = auto_labels.mean()
-    print(f"检测到异常点比例: {anomaly_pct:.2%}")
-    print(f"Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
-
-    # Do iterative filtering
+    # 3. 训练GMM模型
+    best_n = best_n or select_best_components(feats_h01_scaled)
+    gmm = GaussianMixture(n_components=best_n, covariance_type='diag', random_state=1024)
+    gmm.fit(feats_h01_scaled)
+    
+    # 4. 初始化阈值和迭代参数
+    threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)
     icur = 1
-    input_swc_dir = swc_dir
     output_swc_dir = f'cache/h01_round{icur}'
-    os.makedirs(output_swc_dir, exist_ok=True)  # 不报错
+    os.makedirs(output_swc_dir, exist_ok=True)
 
-    max_iter = 10
-    while (anomaly_pct > 0.05) and (icur <= max_iter):
-        # find out the branch with the largest score in each neuron
+    while icur <= max_iter:
+        # 5. 计算异常分数
+        feats_auto = feats_auto_orig[_USE_FEATURES]
+        feats_auto_scaled = scaler.transform(feats_auto)
+        auto_scores = -gmm.score_samples(feats_auto_scaled)
+        auto_labels = (auto_scores > threshold).astype(int)
+        anomaly_pct = auto_labels.mean()
+
+        print(f"[Round {icur}] Anomaly %: {anomaly_pct:.2%}, Top scores: {np.sort(auto_scores)[-5:][::-1]}")
+
+        if anomaly_pct <= 0.05:
+            break
+
+        # 6. 合并异常分支
         tmp_df = feats_auto_orig.copy()
-        tmp_df['neuron'] = ['_'.join(ss.split('_')[:-1]) for ss in feats_auto.index]
-        tmp_df['label'] = auto_labels
+        tmp_df['neuron'] = [ '_'.join(ss.split('_')[:-1]) for ss in feats_auto_orig.index ]
         tmp_df['score'] = auto_scores
-        
-        # 1. 找出所有包含至少一个 label==1 的 neuron
-        neurons_with_label1 = tmp_df[tmp_df['label'] == 1]['neuron'].unique()
+        tmp_df['label'] = auto_labels
 
-        # 2. 在这些 neuron 中，找到每个 neuron 的 score 最大的行
+        neurons_with_label1 = tmp_df[tmp_df['label'] == 1]['neuron'].unique()
+        #在这些 neuron 中，找到每个 neuron 的 score 最大的行
         in_mask = tmp_df['neuron'].isin(neurons_with_label1)
         tmp_df1 = tmp_df[
             in_mask
@@ -544,63 +528,32 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None):
         max_score_rows = tmp_df1.loc[
             tmp_df1.groupby('neuron')['score'].idxmax()
         ]
-        
-        feats_auto_orig = feats_auto_orig[~in_mask]
-        
-        # do merging or removation of the anomaly branches
-        processing_auto = []
-        nprocessed = 0
+
+        # 7. 处理每个异常分支
+        processed_feats = []
         for irow, row in max_score_rows.iterrows():
-            itree = int(irow.split('_')[-1])    # index for current subtree node
-            itree_partner = row.nearest_idx     # index for the partner subtree
-
-            # load the swc
-            swc_file = f'{os.path.join(input_swc_dir, row.neuron)}.swc'
+            swc_file = f"{os.path.join(swc_dir, row.neuron)}.swc"
+            out_swc_file = f"{os.path.join(output_swc_dir, row.neuron)}.swc"
+            
             tree = parse_swc(swc_file)
-
-            # Merge
             pruner = SWCPruneByStems(tree)
-            new_tree = pruner._merge_subtrees(itree, itree_partner)
-            # write to temporary file
-            out_swc_file = f'{os.path.join(output_swc_dir, row.neuron)}.swc'
+            new_tree = pruner._merge_subtrees(int(irow.split('_')[-1]), row.nearest_idx)
             write_swc(new_tree, out_swc_file)
 
-            # re-estimate the features
             sf = StemFeatures(new_tree)
             cur_feats = sf.calc_features()
+            cur_feats.index = [f"{row.neuron}_{sid}" for sid in cur_feats.index]
+            processed_feats.append(cur_feats)
 
-            swc_name = os.path.split(swcfile)[-1][:-4]
-
-            ids = [f'{swc_name}_{sid}' for sid in cur_feats.index]
-            cur_feats.index = ids
-
-            processing_auto.append(cur_feats)
-
-            nprocessed += 1
-            if nprocessed % 20 == 0:
-                print(f'[Round {icur}] [{nprocessed}/{max_score_rows.shape[0]}]')
+            if len(processed_feats) % 10 == 0:
+                print(f'--> [Round {icur}] {len(processed_feats)}/{max_score_rows.shape[0]}')
                 break
-        
-        # concatenate
-        processing_auto = pd.concat(processing_auto)
-        feats_auto_orig = pd.concat((feats_auto_orig, processing_auto))
-        print(f'Number of primary branches: {feats_auto_orig.shape[0]}')
 
-        # normalization
-        feats_auto_scaled = scaler.transform(feats_new[_USE_FEATURES])
-        
-        # predict
-        # 4. 计算异常分数 (负对数似然)
-        auto_scores = -gmm.score_samples(feats_auto_scaled)  # 值越大越异常
-
-        # 6. 标记异常点
-        auto_labels = (auto_scores > threshold).astype(int)  # 1=异常, 0=正常
-
-        # 7. 结果分析
-        anomaly_pct = auto_labels.mean()
-        print(f"[round {icur}] 检测到异常点比例: {anomaly_pct:.2%}")
-        print(f"[round {icur}] Top 5最异常样本的分数: {np.sort(auto_scores)[-5:][::-1]}")
-
+        # 8. 更新特征数据
+        feats_auto_orig = pd.concat([
+            feats_auto_orig[~feats_auto_orig.index.isin(max_score_rows.index)],
+            pd.concat(processed_feats)
+        ])
         icur += 1
 
     
