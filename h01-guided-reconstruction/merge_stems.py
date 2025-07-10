@@ -25,7 +25,23 @@ class SWCPruneByStems:
         self.topo = morphology.Topology(topo_tree)
         # get the soma-connecting points
         self.primary_pts = self.morph.child_dict[self.morph.idx_soma]
+        self.primary_branches = self._get_primary_branches()
         self.subtrees = self._get_subtrees()
+
+    def _get_primary_branches(self):
+        primary_branches = {}
+        for primary_pt in self.primary_pts:
+            pt = primary_pt
+            cur_branch = []
+            while (pt in self.morph.child_dict) and (len(self.morph.child_dict[pt]) < 2):
+                cur_branch.append(pt)
+                pt = self.morph.child_dict[pt][0]
+            else:
+                cur_branch.append(pt)
+
+            primary_branches[primary_pt] = cur_branch
+
+        return primary_branches
 
     def _merge_and_reset_info(self, merged):
         new_tree = []
@@ -47,6 +63,21 @@ class SWCPruneByStems:
             nid = node[0]
             if nid not in to_remove_nodes:
                 new_tree.append(node)
+        # reset the objects
+        self._get_basic_info(new_tree)
+
+    def _merge_and_remove_nodes(self, merged, to_remove_nodes):
+        new_tree = []
+        for node in self.morph.tree:
+            nid = node[0]
+            if nid in merged:
+                new_node = list(node)
+                new_node[-1] = merged[nid]
+                new_node = tuple(new_node)
+            else:
+                if nid not in to_remove_nodes:
+                    new_node = node
+            new_tree.append(new_node)
         # reset the objects
         self._get_basic_info(new_tree)
 
@@ -97,71 +128,54 @@ class SWCPruneByStems:
         """
         morph = self.morph
 
-        import ipdb; ipdb.set_trace()
+        # find out the nodes within soma
+        root_pos = np.array(morph.pos_dict[morph.idx_soma][2:5])  # 根节点位置
+        root_radius = morph.pos_dict[morph.idx_soma][5]
         
-        # 1. 获取所有一级节点间的重叠关系
-        overlaps = self.find_primary_node_overlaps(itree, itree_partner)
-        #print(sum([v is None for v in overlaps.values()]))
-        
-        # 2. 获取每个一级节点的子节点数量
-        child_counts = {
-            node: len(self.subtrees.get(node, []))
-            for node in overlaps.keys()
-        }
-        
-        # 3. 找出需要合并的节点对
-        merges = {}
-        processed = set()
-        
-        for node1, node2 in overlaps.items():
-            if node2 is None or node1 in processed or node2 in processed:
-                continue
-            
-            # 比较两个节点的子节点数量
-            if child_counts[node1] < child_counts[node2]:
-                merges[node1] = node2
-                processed.update([node1, node2])
-            elif child_counts[node1] > child_counts[node2]:
-                merges[node2] = node1
-                processed.update([node1, node2])
-            else:
-                # 如果子节点数量相同，选择距离根节点更近的作为父节点
-                dist1 = np.linalg.norm(np.array(morph.pos_dict[node1][2:5]) - np.array(morph.pos_dict[morph.idx_soma][2:5]))
-                dist2 = np.linalg.norm(np.array(morph.pos_dict[node2][2:5]) - np.array(morph.pos_dict[morph.idx_soma][2:5]))
-                if dist1 < dist2:
-                    merges[node2] = node1
-                else:
-                    merges[node1] = node2
-                processed.update([node1, node2])
+        # get the coordinates of itree1
+        pbcoords1 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches[itree]])
+        pbcoords2 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches[itree_partner]])
 
-        ''' # I think greedy prune is enough, so I comment out this
-        # 4. 处理与多个节点重叠的情况
-        for node1, node2 in overlaps.items():
-            if node2 is None or node1 in processed:
-                continue
+        # estimate the in-radius mask of these nodes
+        def find_first_outside_vec(coords, soma_pos, soma_radius):
+            """使用向量化计算，找到第一个在胞体外的点"""
             
-            # 收集所有重叠节点
-            overlapping_nodes = [n for n, m in overlaps.items() 
-                               if m == node1]
-            overlapping_nodes.append(node2)
+            # 计算每个点到胞体中心的距离 (欧式距离)
+            distances = np.linalg.norm(coords - soma_pos, axis=1)
             
-            # 选择子节点最多的作为父节点
-            candidates = [(n, child_counts[n]) for n in overlapping_nodes]
-            best_parent = max(candidates, key=lambda x: x[1])[0]
-            
-            for node in overlapping_nodes:
-                if node != best_parent:
-                    merges[node] = best_parent
-                    processed.add(node)
-        '''
-        
-        return merges
+            # 找到第一个距离 > soma_radius 的索引
+            outside_mask = distances > soma_radius
+            if np.any(outside_mask):
+                return np.argmax(outside_mask)  # 第一个 True 的位置
+            else:
+                return len(coords)-1  # 所有点都在胞体内，使用最后的点
+
+        # 计算两个 branch 的第一个外部点
+        idx_tree = find_first_outside_vec(pbcoords1, root_pos, root_radius)
+        idx_partner = find_first_outside_vec(pbcoords2, root_pos, root_radius)
+
+        if idx_partner != len(pbcoords2) - 1:
+            donor_id = self.primary_branches[itree][idx_tree]
+            receptor_id = self.primary_branches[itree_partner][idx_partner]
+        else:
+            tmp_idx = max(idx_partner-1, 0)
+            donor_id = self.primary_branches[itree][idx_tree]
+            receptor_id = self.primary_branches[itree_partner][tmp_idx]
+
+        to_remove_nodes = set(self.primary_branches[itree][:idx_tree])
+        merges = {donor_id: receptor_id}
+
+        print(f"First point outside soma in branch1: index {idx_tree} / {len(pbcoords1)}")
+        print(f"First point outside soma in branch2: index {idx_partner} / {len(pbcoords2)}")
+
+        return merges, to_remove_nodes
 
 
     def _merge_subtrees(self, itree, itree_partner):
-        # find out its nearby subtree
-        merged = self.get_primary_node_merges(itree, itree_partner)
-        self._merge_and_reset_info(merged)
+        print(f'#stems before merging: {len(self.subtrees)}')
+        merged, to_remove_nodes = self.get_primary_node_merges(itree, itree_partner)
+        self._merge_and_remove_nodes(merged, to_remove_nodes)
+        print(f'#stems after merging: {len(self.subtrees)}')
 
         return self.morph.tree
         
