@@ -13,6 +13,25 @@ from scipy.spatial.distance import cdist
 from swc_handler import parse_swc, write_swc
 from morph_topo import morphology
 
+
+# estimate the in-radius mask of these nodes
+def find_first_outside_vec(coords, soma_pos, soma_radius):
+    """
+    使用向量化计算，找到第一个在胞体外的点
+    - NOTE: the points (coords) in from soma to terminal
+    """
+    
+    # 计算每个点到胞体中心的距离 (欧式距离)
+    distances = np.linalg.norm(coords - soma_pos, axis=1)
+    
+    # 找到第一个距离 > soma_radius 的索引
+    outside_mask = distances > soma_radius
+    if np.any(outside_mask):
+        return np.argmax(outside_mask)  # 第一个 True 的位置
+    else:
+        return len(coords)-1  # 所有点都在胞体内，使用最后的点
+
+
 class SWCPruneByStems:
     def __init__(self, tree):
         # load the file
@@ -25,11 +44,11 @@ class SWCPruneByStems:
         self.topo = morphology.Topology(topo_tree)
         # get the soma-connecting points
         self.primary_pts = self.morph.child_dict[self.morph.idx_soma]
-        self.primary_branches = self._get_primary_branches()
+        self.primary_branches_r = self._get_primary_branches_r()
         self.subtrees = self._get_subtrees()
 
-    def _get_primary_branches(self):
-        primary_branches = {}
+    def _get_primary_branches_r(self):
+        primary_branches_r = {}
         for primary_pt in self.primary_pts:
             pt = primary_pt
             cur_branch = []
@@ -39,9 +58,9 @@ class SWCPruneByStems:
             else:
                 cur_branch.append(pt)
 
-            primary_branches[primary_pt] = cur_branch
+            primary_branches_r[primary_pt] = cur_branch
 
-        return primary_branches
+        return primary_branches_r
 
     def _merge_and_reset_info(self, merged):
         new_tree = []
@@ -133,23 +152,10 @@ class SWCPruneByStems:
         root_radius = morph.pos_dict[morph.idx_soma][5]
         
         # get the coordinates of itree1
-        pbcoords1 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches[itree]])
-        pbcoords2 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches[itree_partner]])
+        pbcoords1 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches_r[itree]])
+        pbcoords2 = np.array([morph.pos_dict[idx][2:5] for idx in self.primary_branches_r[itree_partner]])
 
-        # estimate the in-radius mask of these nodes
-        def find_first_outside_vec(coords, soma_pos, soma_radius):
-            """使用向量化计算，找到第一个在胞体外的点"""
-            
-            # 计算每个点到胞体中心的距离 (欧式距离)
-            distances = np.linalg.norm(coords - soma_pos, axis=1)
-            
-            # 找到第一个距离 > soma_radius 的索引
-            outside_mask = distances > soma_radius
-            if np.any(outside_mask):
-                return np.argmax(outside_mask)  # 第一个 True 的位置
-            else:
-                return len(coords)-1  # 所有点都在胞体内，使用最后的点
-
+        
         # 计算两个 branch 的第一个外部点
         idx_tree = find_first_outside_vec(pbcoords1, root_pos, root_radius)
         idx_partner = find_first_outside_vec(pbcoords2, root_pos, root_radius)
@@ -159,14 +165,14 @@ class SWCPruneByStems:
             raise NotImplementedError
         else:
             if idx_partner != len(pbcoords2) - 1:
-                donor_id = self.primary_branches[itree][idx_tree]
-                receptor_id = self.primary_branches[itree_partner][idx_partner]
+                donor_id = self.primary_branches_r[itree][idx_tree]
+                receptor_id = self.primary_branches_r[itree_partner][idx_partner]
             else:
                 tmp_idx = max(idx_partner-1, 0)
-                donor_id = self.primary_branches[itree][idx_tree]
-                receptor_id = self.primary_branches[itree_partner][tmp_idx]
+                donor_id = self.primary_branches_r[itree][idx_tree]
+                receptor_id = self.primary_branches_r[itree_partner][tmp_idx]
 
-            to_remove_nodes = set(self.primary_branches[itree][:idx_tree])
+            to_remove_nodes = set(self.primary_branches_r[itree][:idx_tree])
             merges = {donor_id: receptor_id}
 
         #print(f"First point outside soma in branch1: index {idx_tree} / {len(pbcoords1)}")

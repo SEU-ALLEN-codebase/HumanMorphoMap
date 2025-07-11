@@ -18,7 +18,8 @@ from sklearn.mixture import GaussianMixture
 from swc_handler import parse_swc, write_swc
 from morph_topo import morphology
 
-from merge_stems import SWCPruneByStems
+from merge_stems import SWCPruneByStems, find_first_outside_vec
+
 
 _USE_FEATURES = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']
 
@@ -43,6 +44,9 @@ class StemFeatures:
         
     def _get_basic_info(self, tree):
         self.morph = morphology.Morphology(tree)
+        self.soma_pos = np.array(self.morph.pos_dict[self.morph.idx_soma][2:5])
+        self.soma_radius = self.morph.pos_dict[self.morph.idx_soma][5]
+
         topo_tree, self.seg_dict = self.morph.convert_to_topology_tree()
         # convert to topo tree
         self.topo = morphology.Topology(topo_tree)
@@ -50,6 +54,8 @@ class StemFeatures:
         self.primary_pts = self.morph.child_dict[self.morph.idx_soma]
         # get the primary branches
         self.primary_branches = self.get_primary_branches()
+        self.primary_branches_r = self.get_primary_branches_r()
+        self.primary_branches_s, self.primary_branches_s2 = self.get_primary_branches_r_in_soma()
 
         self.subtrees = self._get_subtrees()
 
@@ -99,10 +105,42 @@ class StemFeatures:
 
         return primary_branches
 
+    def get_primary_branches_r(self):
+        """
+        Reverse order to seg_dict, that is, from soma to terminal
+        """
+        primary_branches_r = {}
+        for primary_pt in self.primary_pts:
+            pt = primary_pt
+            cur_branch = []
+            while (pt in self.morph.child_dict) and (len(self.morph.child_dict[pt]) < 2):
+                cur_branch.append(pt)
+                pt = self.morph.child_dict[pt][0]
+            else:
+                cur_branch.append(pt)
+
+            primary_branches_r[primary_pt] = cur_branch
+
+        return primary_branches_r
+
+    def get_primary_branches_r_in_soma(self):
+        """
+        in-soma seg and out-soma seg
+        """
+        primary_branches_s = {}
+        primary_branches_s2 = {}
+        for primary_pt, nodes in self.primary_branches_r.items():
+            coords = np.array([self.morph.pos_dict[idx][2:5] for idx in nodes])
+            indice_node = find_first_outside_vec(coords, self.soma_pos, self.soma_radius)
+            primary_branches_s[primary_pt] = nodes[:indice_node+1]
+            primary_branches_s2[primary_pt] = nodes[indice_node:]
+
+        return primary_branches_s, primary_branches_s2
+
     def _median_radius(self):
         radii_dict = {}
-        for bt, bnodes in self.primary_branches.items():
-            radii = [self.morph.pos_dict[bt][5]]
+        for bt, bnodes in self.primary_branches_s2.items():
+            radii = []
             for bn in bnodes:
                 radii.append(self.morph.pos_dict[bn][5])
             median_radius = np.median(radii)
@@ -112,7 +150,7 @@ class StemFeatures:
         avg_rad = np.mean([*radii_dict.values()])
         wradii_dict = {}
         for bt, btv in radii_dict.items():
-            wradii_dict[bt] = btv / avg_rad
+            wradii_dict[bt] = btv / (avg_rad+1e-6)
 
         return radii_dict, wradii_dict
 
@@ -132,11 +170,14 @@ class StemFeatures:
         return radii_dict
 
     def _euclidean_length(self):
-        soma_pos = np.array(self.morph.pos_dict[self.morph.idx_soma][2:5])
         euc_dict = {}
-        for bt in self.primary_branches.keys():
-            eudist = np.linalg.norm(soma_pos - np.array(self.morph.pos_dict[bt][2:5]))
-            euc_dict[bt] = eudist
+        for bt, bnodes in self.primary_branches.items():
+            eudist = np.linalg.norm(self.soma_pos - np.array(self.morph.pos_dict[bt][2:5]))
+            if len(bnodes) == 0:
+                primary_pt = bt
+            else:
+                primary_pt = bnodes[-1]
+            euc_dict[primary_pt] = eudist
 
         return euc_dict
     
@@ -153,7 +194,12 @@ class StemFeatures:
             branch_lengths = np.linalg.norm(branch_vec, axis=1)
             # total length
             total_length = branch_lengths.sum()
-            path_dict[bt] = total_length
+
+            if len(bnodes) == 0:
+                primary_pt = bt
+            else:
+                primary_pt = bnodes[-1]
+            path_dict[primary_pt] = total_length
 
         return path_dict
 
@@ -169,12 +215,8 @@ class StemFeatures:
 
     def _angles(self, max_nodes=10):
         dfv = []
-        soma_pos = np.array(self.morph.pos_dict[self.morph.idx_soma][2:5])
-        for bt, bnodes in self.primary_branches.items():
-            if len(bnodes) <= max_nodes:
-                vi = np.array(self.morph.pos_dict[bt][2:5]) - soma_pos
-            else:
-                vi = np.array(self.morph.pos_dict[bnodes[max_nodes-1]][2:5]) - soma_pos
+        for bt, bnodes in self.primary_branches_s.items():
+            vi = np.array(self.morph.pos_dict[bnodes[-1]][2:5]) - self.soma_pos
             dfv.append((bt, *vi))
         
         dfv = pd.DataFrame(dfv, columns=('stem_id', 'vx', 'vy', 'vz')).set_index('stem_id')
@@ -211,8 +253,8 @@ class StemFeatures:
         dfvn['straightness'] = pd.Series(str_dict)  
 
         # I would prefer to use the first node of each primary branch, rather than the end node
-        dfvn.index = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.index]
-        dfvn.nearest_idx = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.nearest_idx]
+        #dfvn.index = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.index]
+        #dfvn.nearest_idx = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.nearest_idx]
 
         return dfvn
 
@@ -384,7 +426,7 @@ def plot_outlier_distribution(auto_scores, threshold):
     sns.despine()
     plt.xlim(-15, 25)
     plt.tight_layout()
-    plt.savefig('gmm_predicted.png', dpi=300)
+    plt.savefig('gmm_predicted_initial.png', dpi=300)
     plt.close()
 
 def plot_outlier_statis(proportion_df):
@@ -505,8 +547,9 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
+    visualize = False
     while icur <= max_iter:
-        print(f'\t==> Total stems: {feats_auto_orig.shape[0]}')
+        print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
         feats_auto = feats_auto_orig[_USE_FEATURES]
         feats_auto_scaled = scaler.transform(feats_auto)
@@ -515,6 +558,9 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
         anomaly_pct = auto_labels.mean()
 
         print(f"[Round {icur}] Anomaly %: {anomaly_pct:.2%}, Top scores: {np.sort(auto_scores)[-5:][::-1]}")
+
+        if visualize:
+            break
 
         # 6. 合并异常分支
         tmp_df = feats_auto_orig.copy()
@@ -585,7 +631,6 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
         input_swc_dir = output_swc_dir
 
     
-    visualize = False
     if visualize:
         # overall score distribution
         plot_outlier_distribution(auto_scores, threshold)
@@ -620,7 +665,7 @@ if __name__ == '__main__':
     auto_feat_file = 'auto8.4k_0510_resample1um_stem_features.csv'
 
     if 0:
-        dataset = 'auto'
+        dataset = 'h01'
         if dataset == 'h01':
             calc_features_all(h01_dir, out_csv=h01_feat_file)
         else:
