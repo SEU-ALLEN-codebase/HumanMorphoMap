@@ -119,7 +119,7 @@ class SWCPruneByStems:
 
         return subtrees
         
-    def get_primary_node_merges(self, itree, itree_partner):
+    def get_primary_node_merges(self, itree, itree_partner, use_new_stem=False):
         """
         找出需要合并的一级节点对（将子节点较少节点的父节点改为重叠节点）
         
@@ -154,16 +154,20 @@ class SWCPruneByStems:
         idx_tree = find_first_outside_vec(pbcoords1, root_pos, root_radius)
         idx_partner = find_first_outside_vec(pbcoords2, root_pos, root_radius)
 
-        if idx_partner != len(pbcoords2) - 1:
-            donor_id = self.primary_branches[itree][idx_tree]
-            receptor_id = self.primary_branches[itree_partner][idx_partner]
+        if use_new_stem:
+            # we create a virtual primary branch/ stem to better accommandate the points
+            raise NotImplementedError
         else:
-            tmp_idx = max(idx_partner-1, 0)
-            donor_id = self.primary_branches[itree][idx_tree]
-            receptor_id = self.primary_branches[itree_partner][tmp_idx]
+            if idx_partner != len(pbcoords2) - 1:
+                donor_id = self.primary_branches[itree][idx_tree]
+                receptor_id = self.primary_branches[itree_partner][idx_partner]
+            else:
+                tmp_idx = max(idx_partner-1, 0)
+                donor_id = self.primary_branches[itree][idx_tree]
+                receptor_id = self.primary_branches[itree_partner][tmp_idx]
 
-        to_remove_nodes = set(self.primary_branches[itree][:idx_tree])
-        merges = {donor_id: receptor_id}
+            to_remove_nodes = set(self.primary_branches[itree][:idx_tree])
+            merges = {donor_id: receptor_id}
 
         #print(f"First point outside soma in branch1: index {idx_tree} / {len(pbcoords1)}")
         #print(f"First point outside soma in branch2: index {idx_partner} / {len(pbcoords2)}")

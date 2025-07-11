@@ -497,10 +497,16 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     # 4. 初始化阈值和迭代参数
     threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)
     icur = 1
+    
     output_swc_dir = f'cache/h01_round{icur}'
+    # make sure all cached files are deleted! 
+    os.system(f'rm -rf {output_swc_dir}')
+
     os.makedirs(output_swc_dir, exist_ok=True)
 
+    input_swc_dir = swc_dir
     while icur <= max_iter:
+        print(f'\t==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
         feats_auto = feats_auto_orig[_USE_FEATURES]
         feats_auto_scaled = scaler.transform(feats_auto)
@@ -510,18 +516,29 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
 
         print(f"[Round {icur}] Anomaly %: {anomaly_pct:.2%}, Top scores: {np.sort(auto_scores)[-5:][::-1]}")
 
-        if anomaly_pct <= 0.05:
-            break
-
         # 6. 合并异常分支
         tmp_df = feats_auto_orig.copy()
         tmp_df['neuron'] = [ '_'.join(ss.split('_')[:-1]) for ss in feats_auto_orig.index ]
         tmp_df['score'] = auto_scores
         tmp_df['label'] = auto_labels
+        # Calculate the statistics of neuronal stems
+        scounts = tmp_df.groupby('neuron').count()['label']
+        print(f'Statistics: {scounts.median()}, {scounts.mean():.2f}±{scounts.std():.2f}, {scounts.max()}/{scounts.min()}')
 
+        # Based on predicted `nstems~to-remove-stems`, neurons with less than 7 stems should not processed
+        all_neurons = tmp_df.groupby('neuron').count().index
+        neurons_with_stems7 = all_neurons[tmp_df.groupby('neuron').count()['label'] >= 7]
+
+        # predicted label==1 neurons
         neurons_with_label1 = tmp_df[tmp_df['label'] == 1]['neuron'].unique()
+
+        # only neurons label == 1 and nstems >= 7 are processed
+        neurons_to_process = neurons_with_stems7[neurons_with_stems7.isin(neurons_with_label1)].values
+        if len(neurons_to_process) == 0:
+            break
+
         #在这些 neuron 中，找到每个 neuron 的 score 最大的行
-        in_mask = tmp_df['neuron'].isin(neurons_with_label1)
+        in_mask = tmp_df['neuron'].isin(neurons_to_process)
         tmp_df1 = tmp_df[
             in_mask
         ]
@@ -532,9 +549,18 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
         # 7. 处理每个异常分支
         processed_feats = []
         for irow, row in max_score_rows.iterrows():
-            swc_file = f"{os.path.join(swc_dir, row.neuron)}.swc"
+            raw_swc_file = f"{os.path.join(swc_dir, row.neuron)}.swc"
+            input_swc_file = f"{os.path.join(input_swc_dir, row.neuron)}.swc"
             out_swc_file = f"{os.path.join(output_swc_dir, row.neuron)}.swc"
             
+            if icur == 1:
+                swc_file = raw_swc_file
+            else:
+                if os.path.exists(input_swc_file):
+                    swc_file = input_swc_file
+                else:
+                    swc_file = raw_swc_file
+
             tree = parse_swc(swc_file)
             pruner = SWCPruneByStems(tree)
             new_tree = pruner._merge_subtrees(int(irow.split('_')[-1]), row.nearest_idx)
@@ -545,16 +571,18 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
             cur_feats.index = [f"{row.neuron}_{sid}" for sid in cur_feats.index]
             processed_feats.append(cur_feats)
 
-            if len(processed_feats) % 10 == 0:
+            if len(processed_feats) % 50 == 0:
                 print(f'--> [Round {icur}] {len(processed_feats)}/{max_score_rows.shape[0]}')
-                break
+                #break
 
         # 8. 更新特征数据
         feats_auto_orig = pd.concat([
-            feats_auto_orig[~feats_auto_orig.index.isin(max_score_rows.index)],
+            feats_auto_orig[~in_mask],
             pd.concat(processed_feats)
         ])
+
         icur += 1
+        input_swc_dir = output_swc_dir
 
     
     visualize = False
