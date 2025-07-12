@@ -21,7 +21,7 @@ from morph_topo import morphology
 from merge_stems import SWCPruneByStems, find_first_outside_vec
 
 
-_USE_FEATURES = ['min_cos_similarity', 'num_cos_0.707', 'wradius', 'straightness']
+_USE_FEATURES = ['num_ang_10', 'num_ang_20', 'num_ang_30', 'num_ang_40', 'num_ang_50']
 
 
 class StemFeatures:
@@ -47,17 +47,17 @@ class StemFeatures:
         self.soma_pos = np.array(self.morph.pos_dict[self.morph.idx_soma][2:5])
         self.soma_radius = self.morph.pos_dict[self.morph.idx_soma][5]
 
-        topo_tree, self.seg_dict = self.morph.convert_to_topology_tree()
+        #topo_tree, self.seg_dict = self.morph.convert_to_topology_tree()
         # convert to topo tree
-        self.topo = morphology.Topology(topo_tree)
+        #self.topo = morphology.Topology(topo_tree)
         # get the soma-connecting points
         self.primary_pts = self.morph.child_dict[self.morph.idx_soma]
         # get the primary branches
-        self.primary_branches = self.get_primary_branches()
+        #self.primary_branches = self.get_primary_branches()
         self.primary_branches_r = self.get_primary_branches_r()
         self.primary_branches_s, self.primary_branches_s2 = self.get_primary_branches_r_in_soma()
 
-        self.subtrees = self._get_subtrees()
+        #self.subtrees = self._get_subtrees()
 
     def _get_subtrees(self):
         """
@@ -228,33 +228,31 @@ class StemFeatures:
         # exclude self
         np.fill_diagonal(cosine_sim.values, -1)
         # find out stem with minimal angle
-        min_angle_values = cosine_sim.max(axis=1)
+        #min_angle_values = cosine_sim.max(axis=1)
         # how many stems with small angles
-        count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)  
-        result = pd.DataFrame({
-            'min_cos_similarity': min_angle_values,
-            'num_cos_0.707': count_above_threshold,
-            'nearest_idx': cosine_sim.index[np.argmax(cosine_sim, axis=1)],
-        })
+        ang_dict = {}
+        for ang in range(10, 60, 10):
+            ang_cnt_name = f'num_ang_{ang}'
+            ang_cnt = (cosine_sim > np.cos(ang/180.*np.pi)).sum(axis=1)
+            ang_dict[ang_cnt_name] = ang_cnt
+
+        ang_dict['nearest_idx'] = cosine_sim.index[np.argmax(cosine_sim, axis=1)]
+        result = pd.DataFrame(ang_dict)
         
         return result
 
     
     def calc_features(self):
-        rad_dict, wrad_dict = self._median_radius()
-        euc_dict = self._euclidean_length()
-        path_dict = self._path_length()
-        str_dict = self._straightness(euc_dict, path_dict)
+        #rad_dict, wrad_dict = self._median_radius()
+        #euc_dict = self._euclidean_length()
+        #path_dict = self._path_length()
+        #str_dict = self._straightness(euc_dict, path_dict)
         dfvn = self._angles()
         # merge to the dataframe
-        dfvn['radius'] = pd.Series(rad_dict)
-        dfvn['wradius'] = pd.Series(wrad_dict)
-        dfvn['euc_distance'] = pd.Series(euc_dict)
-        dfvn['straightness'] = pd.Series(str_dict)  
-
-        # I would prefer to use the first node of each primary branch, rather than the end node
-        #dfvn.index = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.index]
-        #dfvn.nearest_idx = [self.seg_dict[idx][-1] if len(self.seg_dict[idx]) > 0 else idx for idx in dfvn.nearest_idx]
+        #dfvn['radius'] = pd.Series(rad_dict)
+        #dfvn['wradius'] = pd.Series(wrad_dict)
+        #dfvn['euc_distance'] = pd.Series(euc_dict)
+        #dfvn['straightness'] = pd.Series(str_dict)  
 
         return dfvn
 
@@ -298,14 +296,14 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         axes = axes.flatten()  # 将axes展平为1D数组
         
         # 遍历每个特征并绘制分布
-        xlims = {
-            'min_cos_similarity': (-1, 1),
-            'num_cos_0.707': (0, 5),
-            'radius': (0, 15),
-            'wradius': (0, 5),
-            'euc_distance': (0, 200),
-            'straightness': (0.5, 1)
-        }
+        #xlims = {
+        #    'min_cos_similarity': (-1, 1),
+        #    'num_cos_0.707': (0, 5),
+        #    'radius': (0, 15),
+        #    'wradius': (0, 5),
+        #    'euc_distance': (0, 200),
+        #    'straightness': (0.5, 1)
+        #}
         for i, feature in enumerate(features):
             ax = axes[i]
             sns.histplot(merged_df[feature], ax=ax, kde=True, bins=30, 
@@ -313,7 +311,7 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
                          line_kws={'color': 'red'})  # 直方图+KDE曲线
             ax.set_title(f"{feature}", fontsize=12)
             ax.set_xlabel("")
-            ax.set_xlim(*xlims[feature])
+            #ax.set_xlim(*xlims[feature])
 
             if i != 0:
                 ax.set_yticks([])
@@ -349,7 +347,7 @@ def select_best_components(data, max_components=60):
     sns.set_theme(style='ticks', font_scale=1.6)
     plt.plot(n_components_range, bic_values, 'o-')
     plt.xlim(0, max_components)
-    plt.ylim(-7e4,5e4)
+    #plt.ylim(-7e4,5e4)
     plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
     plt.xlabel('Number of Components')
     plt.ylabel('BIC Score')
@@ -373,6 +371,10 @@ def plot_outlier_distribution(auto_scores, threshold):
         """生成与threshold对齐的分箱边界"""
         min_val = np.min(scores)
         max_val = np.max(scores)
+
+        if max_val > 10000: # in case of outliers
+            v5, v25, v50, v75, v95 = np.percentile(auto_scores, [5, 25, 50, 75, 95])
+            max_val = v95 + (v95 - v5) / 0.9 * 0.05
         
         # 计算threshold两侧需要的bin数量比例
         left_ratio = (threshold - min_val) / (max_val - min_val)
@@ -424,7 +426,7 @@ def plot_outlier_distribution(auto_scores, threshold):
            ylabel='Density',
            title='Anomaly Score Distribution')
     sns.despine()
-    plt.xlim(-15, 25)
+    plt.xlim(aligned_bins[0], aligned_bins[-1])
     plt.tight_layout()
     plt.savefig('gmm_predicted_initial.png', dpi=300)
     plt.close()
@@ -479,7 +481,7 @@ def plot_label_diff(feats_auto):
 
     plt.figure(figsize=(12, 8))
     for i, feature in enumerate(features, 1):
-        plt.subplot(2, 2, i)
+        plt.subplot(2, 3, i)
         sns.violinplot(x='label', y=feature, data=feats_auto, palette='muted', split=True)
         plt.title(f'Violin Plot of {feature}')
 
@@ -547,7 +549,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
-    visualize = True
+    visualize = False
     while icur <= max_iter:
         print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
@@ -665,14 +667,14 @@ if __name__ == '__main__':
     auto_feat_file = 'auto8.4k_0510_resample1um_stem_features.csv'
 
     if 0:
-        dataset = 'h01'
+        dataset = 'auto'
         if dataset == 'h01':
             calc_features_all(h01_dir, out_csv=h01_feat_file)
         else:
             calc_features_all(auto_dir, out_csv=auto_feat_file)
     
     if 1:
-        best_n = 38 # estimated using `select_best_components` # 55
+        best_n = 42 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
 
