@@ -528,10 +528,11 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     # 1. 加载数据
     feats_h01 = pd.read_csv(h01_feat_file, index_col=0)[_USE_FEATURES]
     feats_auto_orig = pd.read_csv(auto_feat_file, index_col=0)
+    weights = [1/np.power(10, i) for i in range(feats_h01.shape[1])]   # the local angles are most important!
 
     # 2. 标准化（基于h01数据）
     scaler = StandardScaler()
-    feats_h01_scaled = scaler.fit_transform(feats_h01)
+    feats_h01_scaled = scaler.fit_transform(feats_h01) * weights
     
     # 3. 训练GMM模型
     best_n = best_n or select_best_components(feats_h01_scaled)
@@ -554,7 +555,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
         print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
         feats_auto = feats_auto_orig[_USE_FEATURES]
-        feats_auto_scaled = scaler.transform(feats_auto)
+        feats_auto_scaled = scaler.transform(feats_auto) * weights
         auto_scores = -gmm.score_samples(feats_auto_scaled)
         auto_labels = (auto_scores > threshold).astype(int)
         anomaly_pct = auto_labels.mean()
@@ -667,14 +668,14 @@ if __name__ == '__main__':
     auto_feat_file = 'auto8.4k_0510_resample1um_stem_features.csv'
 
     if 0:
-        dataset = 'auto'
+        dataset = 'h01'
         if dataset == 'h01':
             calc_features_all(h01_dir, out_csv=h01_feat_file)
         else:
             calc_features_all(auto_dir, out_csv=auto_feat_file)
     
     if 1:
-        best_n = 42 # estimated using `select_best_components` # 55
+        best_n = 11 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
 
