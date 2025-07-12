@@ -164,13 +164,9 @@ class SWCPruneByStems:
             # we create a virtual primary branch/ stem to better accommandate the points
             raise NotImplementedError
         else:
-            if idx_partner != len(pbcoords2) - 1:
-                donor_id = self.primary_branches_r[itree][idx_tree]
-                receptor_id = self.primary_branches_r[itree_partner][idx_partner]
-            else:
-                tmp_idx = max(idx_partner-1, 0)
-                donor_id = self.primary_branches_r[itree][idx_tree]
-                receptor_id = self.primary_branches_r[itree_partner][tmp_idx]
+            tmp_idx = max(idx_partner-2, 0) # back to previous nodes, to alleviate large angle
+            donor_id = self.primary_branches_r[itree][idx_tree]
+            receptor_id = self.primary_branches_r[itree_partner][tmp_idx]
 
             to_remove_nodes = set(self.primary_branches_r[itree][:idx_tree])
             merges = {donor_id: receptor_id}
