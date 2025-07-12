@@ -21,7 +21,7 @@ from morph_topo import morphology
 from merge_stems import SWCPruneByStems, find_first_outside_vec
 
 
-_USE_FEATURES = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']
+_USE_FEATURES = ['min_cos_similarity', 'num_cos_0.707', 'wradius', 'straightness']
 
 
 class StemFeatures:
@@ -230,10 +230,10 @@ class StemFeatures:
         # find out stem with minimal angle
         min_angle_values = cosine_sim.max(axis=1)
         # how many stems with small angles
-        count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)   # < 45 deg
+        count_above_threshold =  (cosine_sim > 0.707).sum(axis=1)  
         result = pd.DataFrame({
             'min_cos_similarity': min_angle_values,
-            'count_above_0.707': count_above_threshold,
+            'num_cos_0.707': count_above_threshold,
             'nearest_idx': cosine_sim.index[np.argmax(cosine_sim, axis=1)],
         })
         
@@ -300,7 +300,7 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         # 遍历每个特征并绘制分布
         xlims = {
             'min_cos_similarity': (-1, 1),
-            'count_above_0.707': (0, 5),
+            'num_cos_0.707': (0, 5),
             'radius': (0, 15),
             'wradius': (0, 5),
             'euc_distance': (0, 200),
@@ -332,7 +332,7 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
     return merged_df
     
 # 2. 基于BIC选择最佳n_components
-def select_best_components(data, max_components=80):
+def select_best_components(data, max_components=60):
     """自动选择最佳GMM组件数量"""
     bic_values = []
     n_components_range = range(1, max_components+1)
@@ -470,7 +470,7 @@ def plot_outlier_statis(proportion_df):
 
 def plot_label_diff(feats_auto):
     # 筛选特征列
-    features = ['min_cos_similarity', 'count_above_0.707', 'wradius', 'straightness']
+    features = [*_USE_FEATURES]
 
     # 按 label 分组计算统计量
     stats = feats_auto.groupby('label')[features].agg(['mean', 'std', 'median', 'min', 'max'])
@@ -547,7 +547,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
-    visualize = False
+    visualize = True
     while icur <= max_iter:
         print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
