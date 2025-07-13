@@ -400,7 +400,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 if __name__ == '__main__':
     meta_file_neuron = '../meta/1-50114.xlsx.csv'
     #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
-    gf_file = '../h01-guided-reconstruction/auto8.4k_0510_pruned_resample1um.csv'
+    gf_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv'
     ihc = 2 # 0,1,2(all type)
 
     if 0:

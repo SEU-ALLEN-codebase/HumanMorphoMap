@@ -93,10 +93,10 @@ class SWCPruneByStems:
                 new_node = list(node)
                 new_node[-1] = merged[nid]
                 new_node = tuple(new_node)
+                new_tree.append(new_node)
             else:
                 if nid not in to_remove_nodes:
-                    new_node = node
-            new_tree.append(new_node)
+                    new_tree.append(node)
         # reset the objects
         self._get_basic_info(new_tree)
 

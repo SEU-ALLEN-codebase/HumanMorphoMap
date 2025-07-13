@@ -169,6 +169,40 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
 
     meta_n = pd.read_csv(meta_file_neuron, index_col=0, low_memory=False, encoding='gbk')
     gfs = pd.read_csv(gf_file, index_col=0, low_memory=False)
+    # rename the index to purly cell index, FOR RENAME
+    if gfs.index.dtype != 'int64':
+        gfs.index = [int(idx.split('_')[0]) for idx in gfs.index]
+
+    # also rename the columns
+    column_mapping = {
+        'Nodes': 'N_node',
+        'SomaSurface': 'Soma_surface',
+        'Stems': 'N_stem',
+        'Bifurcations': 'Number of Bifurcations',
+        'Branches': 'Number of Branches',
+        'Tips': 'Number of Tips',
+        'OverallWidth': 'Overall Width',
+        'OverallHeight': 'Overall Height',
+        'OverallDepth': 'Overall Depth',
+        'AverageDiameter': 'Average Diameter',
+        'Length': 'Total Length',
+        'Surface': 'Total Surface',
+        'Volume': 'Total Volume',
+        'MaxEuclideanDistance': 'Max Euclidean Distance',
+        'MaxPathDistance': 'Max Path Distance',
+        'MaxBranchOrder': 'Max Branch Order',
+        'AverageContraction': 'Average Contraction',
+        'AverageFragmentation': 'Average Fragmentation',
+        'AverageParent-daughterRatio': 'Average Parent-daughter Ratio',
+        'AverageBifurcationAngleLocal': 'Average Bifurcation Angle Local',
+        'AverageBifurcationAngleRemote': 'Average Bifurcation Angle Remote',
+        'HausdorffDimension': 'Hausdorff Dimension'
+    }
+
+    # 假设 df 是你的 DataFrame
+    gfs = gfs.rename(columns=column_mapping)
+    gfs = gfs.loc[meta_n.cell_id]
+
     meta_t = pd.read_csv(meta_file_tissue, index_col=0)
     meta_t.set_index('idx')
     ctypes = pd.read_csv(ctype_file, index_col=0)
@@ -321,7 +355,8 @@ if __name__ == '__main__':
     if 1:
         meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
         #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
-        gf_file = '../h01-guided-reconstruction/auto8.4k_0510_pruned_resample1um.csv'
+        gf_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_renamed.csv'
+        #gf_file = '../h01-guided-reconstruction/old0708/auto8.4k_0510_pruned_resample1um.csv'
         ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
         morphology_difference_between_infiltration_normal(meta_file_neuron, meta_file_tissue_JSP, gf_file, ctype_file, ihc=1)
 

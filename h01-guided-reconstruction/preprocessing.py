@@ -56,8 +56,8 @@ if __name__ == '__main__':
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
         #outfile = 'gf_H01_resample1um_prune25um.csv'
     
-        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um'
-        outfile = 'auto8.4k_0510_resample1um.csv'
+        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
+        outfile = 'auto8.4k_0510_resample1um_mergedBranches0712.csv'
 
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/manual_resampled1um'
         #outfile = 'manual_resampled1um.csv'

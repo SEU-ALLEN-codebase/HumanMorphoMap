@@ -613,6 +613,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
             tree = parse_swc(swc_file)
             pruner = SWCPruneByStems(tree)
             new_tree = pruner._merge_subtrees(int(irow.split('_')[-1]), row.nearest_idx)
+            #print(f'   {len(tree)} --> {len(new_tree)}')
             write_swc(new_tree, out_swc_file)
 
             sf = StemFeatures(new_tree)
