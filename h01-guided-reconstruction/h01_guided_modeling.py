@@ -5,6 +5,7 @@
 ##########################################################
 
 import os
+import math
 import glob
 import copy
 import numpy as np
@@ -364,8 +365,31 @@ def select_best_components(data, max_components=60):
     return best_n
 
 def plot_outlier_distribution(auto_scores, threshold):
+
+    ########### Helper function ###########
+    def floor_to_n_significant_str(num, n=5):
+        if num == 0:
+            return 0.0
+        # 格式化为科学计数法字符串，保留n位有效数字
+        s = "{:.{}e}".format(num, n)  # 例如 "1.234567e+02"
+        mantissa_str, exponent_str = s.split("e")
+        mantissa = float(mantissa_str)
+        exponent = int(exponent_str)
+        # 对尾数向下取整
+        floor_mantissa = math.floor(mantissa * 10**(n-1)) / 10**(n-1)
+        # 恢复原始数量级并格式化为普通浮点数
+        result = floor_mantissa * 10**exponent
+        # 处理可能的浮点误差（如 0.0012345 → 0.001234499999...）
+        return float("{:.{}g}".format(result, n))
+
+
     sns.set_theme(style='ticks', font_scale=1.6)
     plt.figure(figsize=(6, 6))
+
+    threshold = float(floor_to_n_significant_str(threshold, 5))  # to avoid overlapping bins
+    print(threshold)
+
+
     # 创建明确的分组标签数组
     hue_labels = np.where(auto_scores > threshold, 'Anomaly', 'Normal')
 
@@ -399,11 +423,13 @@ def plot_outlier_distribution(auto_scores, threshold):
     
 
     # 使用示例
-    aligned_bins = make_aligned_bins(auto_scores, threshold, n_bins=80)
+    aligned_bins = make_aligned_bins(auto_scores, threshold, n_bins=40)
 
     # 绘制直方图
+    #import ipdb; ipdb.set_trace()
     ax = sns.histplot(x=auto_scores,
                      bins=aligned_bins,
+                     stat='probability',
                      kde=False,
                      hue=hue_labels,
                      palette={'Normal': 'skyblue', 'Anomaly': 'tomato'},
@@ -421,16 +447,21 @@ def plot_outlier_distribution(auto_scores, threshold):
     ax.legend(handles=legend_elements, loc='upper right', frameon=False)
 
     # 添加统计标注
+    if threshold > 0:
+        scalef = 1.1
+    else:
+        scalef = 0.99
+
     ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
                 xy=(threshold, 0),
-                xytext=(threshold*1.1, ax.get_ylim()[1]*0.7))#,
+                xytext=(threshold*scalef, ax.get_ylim()[1]*0.5))#,
                 #arrowprops=dict(arrowstyle='->'),
                 #bbox=dict(boxstyle='round', fc='white'))
 
     # 格式调整
     ax.set(xlabel='Anomaly Score', 
-           ylabel='Density',
-           title='Anomaly Score Distribution')
+           ylabel='Proportion',
+           title='Predicted Anomaly Score Distribution\nusing GMM model')
     sns.despine()
     plt.xlim(aligned_bins[0], aligned_bins[-1])
     plt.tight_layout()
@@ -547,6 +578,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     
     # 4. 初始化阈值和迭代参数
     threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)
+
     icur = 1
     
     output_swc_dir = f'cache/h01_round{icur}'
