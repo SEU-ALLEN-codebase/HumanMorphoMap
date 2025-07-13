@@ -345,15 +345,18 @@ def select_best_components(data, max_components=60):
     
     # 可视化BIC曲线
     sns.set_theme(style='ticks', font_scale=1.6)
+    plt.figure(figsize=(6,6))
     plt.plot(n_components_range, bic_values, 'o-')
     plt.xlim(0, max_components)
-    #plt.ylim(-7e4,5e4)
+    plt.ylim(-9e5,-7e5)
+    plt.yticks([-9e5,-8e5,-7e5])    
+
     plt.gca().ticklabel_format(style='sci', axis='y', scilimits=(0,0))
     plt.xlabel('Number of Components')
     plt.ylabel('BIC Score')
     plt.subplots_adjust(bottom=0.15)
     plt.title('BIC for GMM Model Selection')
-    plt.savefig('gmm_bic.png', dpi=300)
+    plt.savefig('gmm_bic.png', dpi=600)
     plt.close()
     
     best_n = np.argmin(bic_values) + 1  # +1因为从0开始索引
@@ -362,7 +365,7 @@ def select_best_components(data, max_components=60):
 
 def plot_outlier_distribution(auto_scores, threshold):
     sns.set_theme(style='ticks', font_scale=1.6)
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(6, 6))
     # 创建明确的分组标签数组
     hue_labels = np.where(auto_scores > threshold, 'Anomaly', 'Normal')
 
@@ -387,6 +390,9 @@ def plot_outlier_distribution(auto_scores, threshold):
         # 生成分段线性分箱
         left_edges = np.linspace(min_val, threshold, left_bins + 1)
         right_edges = np.linspace(threshold, max_val, right_bins + 1)
+        # remove possible duplicates
+        if left_edges[-1] == right_edges[0]:
+            left_edges = left_edges[:-1]
         
         # 合并并去重（threshold会出现在两个数组中）
         return np.unique(np.concatenate([left_edges, right_edges]))
@@ -398,7 +404,7 @@ def plot_outlier_distribution(auto_scores, threshold):
     # 绘制直方图
     ax = sns.histplot(x=auto_scores,
                      bins=aligned_bins,
-                     kde=True,
+                     kde=False,
                      hue=hue_labels,
                      palette={'Normal': 'skyblue', 'Anomaly': 'tomato'},
                      edgecolor='white',
@@ -428,7 +434,7 @@ def plot_outlier_distribution(auto_scores, threshold):
     sns.despine()
     plt.xlim(aligned_bins[0], aligned_bins[-1])
     plt.tight_layout()
-    plt.savefig('gmm_predicted_initial.png', dpi=300)
+    plt.savefig('gmm_predicted_initial.png', dpi=600)
     plt.close()
 
 def plot_outlier_statis(proportion_df):
@@ -550,7 +556,7 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
-    visualize = False
+    visualize = True
     while icur <= max_iter:
         print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数

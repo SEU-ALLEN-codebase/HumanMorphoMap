@@ -24,11 +24,11 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
     ############### Helper functions ################
     # 标注显著性
     def get_stars(p):
-        if p < 0.001: return '***'
-        elif p < 0.01: return '**'
-        elif p < 0.05: return '*'
-        elif p < 0.1: return '†'  # 趋势性标记
-        else: return 'n.s.'
+        if p < 0.001: return '***(<0.001)'
+        elif p < 0.01: return '**(<0.01)'
+        elif p < 0.05: return '*(<0.05)'
+        elif p < 0.1: return '†(<0.1)'  # 趋势性标记
+        else: return 'n.s.(≥0.1)'
 
     def _plot(gfs_cur, figname):
         sns.set_theme(style='ticks', font_scale=1.8)
@@ -76,6 +76,11 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows), sharex=True)
         axes = axes.flatten()
 
+        colors_pal = {
+            'normal': 'lightcoral', 
+            'infiltration': 'gold'
+        }
+        
         # 为每个特征绘制箱线图和回归线
         for i, feature in enumerate(features):
             ax = axes[i]
@@ -87,8 +92,10 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
                 y=feature,
                 ax=ax,
                 width=0.4,  # 更窄的箱体
-                color='skyblue',
+                hue='tissue_type',
+                palette=colors_pal,
                 showmeans=False,
+                legend=False,
                 linewidth=3,
                 meanprops={'marker': 'o', 'markerfacecolor': 'red', 'linewidth': 3}
             )
@@ -123,17 +130,18 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
             group2 = gfs_cur[gfs_cur['tissue_type'] == bin_means['tissue_type'][1]][feature]
             u_stat, p_value = mannwhitneyu(group1, group2, alternative='two-sided')
             # 绘制横线和星号
-            x1, x2 = 0.15, 0.85
+            x1, x2 = 0.12, 0.88
             y_min, y_max = y_limits[feature]  # 标注的y轴位置
             y_delta = (y_max - y_min)
             
-            y1, y2 = y_max-0.16*y_delta, y_max-0.12*y_delta
+            y1, y2 = y_max-0.14*y_delta, y_max-0.12*y_delta
             y3 = y_max-0.11*y_delta
             ax.plot([x1, x1, x2, x2], [y1, y2, y2, y1], lw=2, color='red')
             stars = get_stars(p_value)
             y_text = y1 if stars.startswith('*') else y3
-            ax.text((x1+x2)*0.5, y_text, stars, 
-                   ha='center', va='bottom', color='red')
+            #ax.text((x1+x2)*0.5, y_text, stars, 
+            #       ha='center', va='bottom', color='red')
+            print(stars)
             
 
             # 设置 y 轴范围（排除异常值）
@@ -256,7 +264,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
 
 
     if 1:
-        sns.set_theme(style='ticks', font_scale=2.2)
+        sns.set_theme(style='ticks', font_scale=2.4)
 
         # estimate the pyramidal/nonpyramidal cell ratio
         np_ratios = {
@@ -289,7 +297,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         # 绘图设置
         groups = list(np_ratios.keys())
         x_pos = np.arange(len(groups))  # 组的位置
-        colors = ['skyblue', 'lightcoral']  # 每组颜色
+        colors = ['lightcoral', 'gold']  # 每组颜色
 
         plt.figure(figsize=(6, 6))  # 正方形图像
         # 绘制柱状图
@@ -341,7 +349,7 @@ def morphology_difference_between_infiltration_normal(meta_file_neuron, meta_fil
         plt.ylabel('% nonpyramidal cells')
         plt.subplots_adjust(left=0.17, bottom=0.17)
         #plt.title('Comparison of NP Ratios (Mean ± SEM)')
-        plt.savefig('nonpyramidal_percentage_across_tissue_types.png', dpi=300)
+        plt.savefig('nonpyramidal_percentage_across_tissue_types.png', dpi=600)
         plt.close()
 
         print()
