@@ -470,14 +470,17 @@ def plot_outlier_statis(proportion_df):
     sns.set_theme(style='ticks', font_scale=1.6)
         
     # 绘制直方图
-    plt.figure(figsize=(10, 6))
-    sns.histplot(proportion_df['proportion_label_1'], bins=20, kde=False, color='skyblue', edgecolor='black')
+    plt.figure(figsize=(6, 6))
+    sns.histplot(proportion_df['proportion_label_1'], bins=20, kde=False, color='lightskyblue', edgecolor='black')
 
     # 添加标题和标签
-    plt.title('Distribution of proportion_label_1 (label=1 proportion per neuron)')
-    plt.xlabel('Proportion of stems with label=1')
+    plt.title('Anomaly distribution in original morphology')
+    plt.xticks([0,2,4,6,8,10,12,14])
+    plt.xlim(0, 14)
+    plt.xlabel('Number of anomaly stems')
     plt.ylabel('Number of neurons')
-    plt.savefig('t0.png', dpi=300)
+    plt.subplots_adjust(left=0.17, bottom=0.15)
+    plt.savefig('t0.png', dpi=600)
     plt.close()
 
 
@@ -491,18 +494,22 @@ def plot_outlier_statis(proportion_df):
     # should normalize by each column
     heatmap_data_normalized = heatmap_data.div(heatmap_data.sum(axis=1), axis=0)
 
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(8, 8))
     sns.heatmap(
         heatmap_data_normalized,
         cmap='viridis',
-        cbar_kws={'label': 'Number of Neurons'}
+        square=True,
+        cbar_kws={
+            'label': 'Proportion of neurons',
+            'aspect': 6,
+            'shrink': 0.3
+        }
     )
 
-    plt.title('Heatmap: stem_count vs. proportion_label_1')
-    plt.xlabel('Proportion of label=1')
-    plt.ylabel('Stem Count')
+    plt.xlabel('Number of anomaly stems')
+    plt.ylabel('Number of stems within a neuron')
 
-    plt.savefig('t1.png', dpi=300)
+    plt.savefig('t1.png', dpi=600)
     plt.close()
 
 def plot_label_diff(feats_auto):
