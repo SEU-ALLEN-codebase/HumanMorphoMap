@@ -367,26 +367,24 @@ def select_best_components(data, max_components=60):
 def plot_outlier_distribution(auto_scores, threshold):
 
     ########### Helper function ###########
-    def floor_to_n_significant_str(num, n=5):
+    def ceil_to_n_significant_digits(num, n=5):
         if num == 0:
             return 0.0
-        # 格式化为科学计数法字符串，保留n位有效数字
-        s = "{:.{}e}".format(num, n)  # 例如 "1.234567e+02"
-        mantissa_str, exponent_str = s.split("e")
-        mantissa = float(mantissa_str)
-        exponent = int(exponent_str)
-        # 对尾数向下取整
-        floor_mantissa = math.floor(mantissa * 10**(n-1)) / 10**(n-1)
-        # 恢复原始数量级并格式化为普通浮点数
-        result = floor_mantissa * 10**exponent
-        # 处理可能的浮点误差（如 0.0012345 → 0.001234499999...）
-        return float("{:.{}g}".format(result, n))
-
+        # 计算科学计数法的指数
+        exponent = math.floor(math.log10(abs(num)))
+        # 将数字缩放到 1eX 范围内，然后乘以 10^(n-1) 进行ceil操作
+        scaled = num / 10**exponent  # 例如 123.456 → 1.23456
+        multiplier = 10 ** (n - 1)
+        ceil_scaled = math.ceil(scaled * multiplier) / multiplier  # 1.23456 → 1.2346 (若n=5)
+        # 恢复原始数量级
+        return ceil_scaled * 10**exponent
+    
 
     sns.set_theme(style='ticks', font_scale=1.6)
     plt.figure(figsize=(6, 6))
 
-    threshold = float(floor_to_n_significant_str(threshold, 5))  # to avoid overlapping bins
+    # to avoid overlapping bins caused by float precision
+    threshold = ceil_to_n_significant_digits(threshold, 5)
     print(threshold)
 
 
@@ -412,7 +410,7 @@ def plot_outlier_distribution(auto_scores, threshold):
         right_bins = max(1, int(np.round(n_bins * right_ratio)))
         
         # 生成分段线性分箱
-        left_edges = np.linspace(min_val, threshold, left_bins + 1)
+        left_edges = np.linspace(min_val, threshold, left_bins + 1, endpoint=False)
         right_edges = np.linspace(threshold, max_val, right_bins + 1)
         # remove possible duplicates
         if left_edges[-1] == right_edges[0]:
@@ -461,7 +459,7 @@ def plot_outlier_distribution(auto_scores, threshold):
     # 格式调整
     ax.set(xlabel='Anomaly Score', 
            ylabel='Proportion',
-           title='Predicted Anomaly Score Distribution\nusing GMM model')
+           title='Predicted Anomaly Distribution\nusing GMM model')
     sns.despine()
     plt.xlim(aligned_bins[0], aligned_bins[-1])
     plt.tight_layout()
