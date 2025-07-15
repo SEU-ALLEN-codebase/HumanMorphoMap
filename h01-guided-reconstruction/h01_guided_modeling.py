@@ -6,8 +6,10 @@
 
 import os
 import math
+import time
 import glob
 import copy
+import pickle
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
@@ -240,7 +242,7 @@ class StemFeatures:
         ang_dict['nearest_idx'] = cosine_sim.index[np.argmax(cosine_sim, axis=1)]
         result = pd.DataFrame(ang_dict)
         
-        return result
+        return result, cosine_sim
 
     
     def calc_features(self):
@@ -248,7 +250,7 @@ class StemFeatures:
         #euc_dict = self._euclidean_length()
         #path_dict = self._path_length()
         #str_dict = self._straightness(euc_dict, path_dict)
-        dfvn = self._angles()
+        dfvn, _ = self._angles()
         # merge to the dataframe
         #dfvn['radius'] = pd.Series(rad_dict)
         #dfvn['wradius'] = pd.Series(wrad_dict)
@@ -329,6 +331,105 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
         plt.savefig(f'feature_distribution_{out_csv}.png', dpi=300)
 
     return merged_df
+
+def plot_spatial_angles(swc_dirs, ang_files, datasets):
+
+    all_angles = {}
+    for swc_dir, ang_file, dataset in zip(swc_dirs, ang_files, datasets):
+        # We firstly calculate all the included angles between stems
+        if os.path.exists(ang_file):
+            with open(ang_file, 'rb') as fp:
+                all_angles[dataset] = pickle.load(fp)
+        else:
+            angles_dict = {}
+            t0 = time.time()
+            for swcfile in glob.glob(os.path.join(swc_dir, '*.swc')):
+                sf = StemFeatures(swcfile)
+                _, cos_angles = sf._angles()
+
+                # extract unique cos_angles, and convert to degrees
+                cosine_matrix = cos_angles.to_numpy()
+                ncos = cosine_matrix.shape[0]
+
+                # 获取上三角部分的索引（不含对角线）
+                upper_tri_indices = np.triu_indices(ncos, k=1)  # k=1 表示排除对角线
+                cosine_values = cosine_matrix[upper_tri_indices]
+
+                # 转换为角度
+                angles_deg = np.rad2deg(np.arccos(np.clip(cosine_values, -1.0, 1.0)))
+
+                # swc name
+                swc_name = os.path.split(swcfile)[-1][:-4]
+                angles_dict[swc_name] = [ncos, angles_deg]
+
+                if len(angles_dict) % 100 == 0:
+                    print(f'==> Processed {len(angles_dict)} neurons in {time.time()-t0:.2f} seconds')
+                    #if len(angles_dict) == 1000:
+                    #    break
+
+            all_angles[dataset] = angles_dict
+
+            # write to file
+            with open(ang_file, 'wb') as fp:
+                pickle.dump(angles_dict, fp)
+
+
+    if 1:
+        # 准备数据为DataFrame
+        data_list = []
+        for dataset_name, angles_dict in all_angles.items():
+            angles = np.concatenate([v[1] for v in angles_dict.values()])
+            for angle in angles:
+                data_list.append({'Dataset': dataset_name, 'Angle': angle})
+        df = pd.DataFrame(data_list)
+
+        # 设置绘图风格
+        plt.figure(figsize=(6, 6))
+        sns.set_theme(style='ticks', font_scale=1.4)
+        palette = {'h01': '#1f77b4', 'auto': '#ff7f0e', 'processed': '#2ca02c'}  # 自定义颜色
+
+        # 创建绘图对象
+        ax = plt.gca()
+        # 明确为每个数据集绘制KDE并指定标签
+        for dataset, color in palette.items():
+            subset = df[df['Dataset'] == dataset]
+            sns.kdeplot(
+                data=subset, x='Angle',
+                color=color,
+                label=dataset,  # 关键：明确设置label
+                linewidth=2.5,
+                fill=True,
+                alpha=0.1,
+                bw_adjust=0.5,
+                ax=ax
+            )
+
+        # 添加辅助元素
+        plt.xlabel('Inter-stem angle (degrees)')
+        plt.ylabel('Density')
+        #plt.title('Comparison of Branch Angle Distributions', pad=5)
+        #plt.grid(axis='y', linestyle='--', alpha=0.4)
+
+        # 调整图例
+        ax.legend(
+            title='Dataset',
+            frameon=False,
+            facecolor='white',
+            loc='upper left'
+        )
+
+        # 设置坐标轴范围
+        xmax = 50
+        plt.xlim(0, xmax)
+        plt.ylim(0, 0.008)
+        plt.xticks(np.arange(0, xmax+1, 10))
+        plt.yticks([0, 0.002, 0.004, 0.006, 0.008])
+
+        plt.tight_layout()
+        plt.savefig('angle_distribution_comparison.png', dpi=300, bbox_inches='tight')
+        plt.close()
+    
+
     
 # 2. 基于BIC选择最佳n_components
 def select_best_components(data, max_components=60):
@@ -707,9 +808,12 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
 if __name__ == '__main__':
 
     h01_dir = './data/H01_resample1um_prune25um'
-    h01_feat_file = 'h01_stem_features.csv'
+    h01_feat_file = './data/h01_stem_features.csv'
+    h01_ang_file = './data/h01_angles.pkl'    
+
     auto_dir = './data/auto8.4k_0510_resample1um' 
-    auto_feat_file = 'auto8.4k_0510_resample1um_stem_features.csv'
+    auto_feat_file = './data/auto8.4k_0510_resample1um_stem_features.csv'
+    auto_ang_file = './data/auto8.4k_0510_resample1um_angles.pkl'
 
     if 0:
         dataset = 'h01'
@@ -718,8 +822,18 @@ if __name__ == '__main__':
         else:
             calc_features_all(auto_dir, out_csv=auto_feat_file)
     
-    if 1:
+    if 0:
         best_n = 11 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
+    if 1:
+        swc_dirs = [h01_dir, auto_dir, './data/auto8.4k_0510_resample1um_mergedBranches0712']
+        ang_files = [h01_ang_file, auto_ang_file, 
+                     './data/auto8.4k_0510_resample1um_mergedBranches0712_angles.pkl'
+                    ]
+        datasets = ['h01', 'auto', 'processed']
+
+        # visualize the spatial distributions
+        plot_spatial_angles(swc_dirs, ang_files, datasets)
+
 
