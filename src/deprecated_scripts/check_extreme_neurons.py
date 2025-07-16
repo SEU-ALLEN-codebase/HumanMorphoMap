@@ -10,6 +10,8 @@ from scipy.stats import mannwhitneyu
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+import sys
+sys.path.append('..')
 from config import REG2LOBE
 
 def check_extreme_neurons(gf_file, meta_file, update_file, fn, pn=0.95, display=False):
@@ -101,9 +103,12 @@ def check_extreme_neurons(gf_file, meta_file, update_file, fn, pn=0.95, display=
     #import ipdb; ipdb.set_trace()
     print()
 
-def plot_stem_distributions(datasets):
+def plot_stem_distributions(datasets, processed=False):
     nstems = {}
     for dk, dv in datasets.items():
+        if (dk == 'SEU-H8K\n(H01-modeled)') and (not processed):
+            continue
+        
         print(f'--> {dk}')
         dfn = pd.read_csv(dv, index_col=0, low_memory=False)
         try:
@@ -116,7 +121,11 @@ def plot_stem_distributions(datasets):
     df_stems = pd.DataFrame(nstems)
     
     sns.set_theme(style='ticks', font_scale=1.5)
-    plt.figure(figsize=(6,6))
+    if processed:
+        figsize = (8,6)
+    else:
+        figsize = (6,6)
+    plt.figure(figsize=figsize)
     sns.violinplot(df_stems, fill=False, cut=0)
 
     # perform statistical test
@@ -139,7 +148,11 @@ def plot_stem_distributions(datasets):
 
     #plt.xlabel('Dataset')
     #plt.ylabel('Number of subtrees')
-    plt.savefig(f'stem_distributions_comp.png', dpi=300); plt.close()
+    if processed:
+        figname = f'stem_distributions_comp_processed.png'
+    else:
+        figname = f'stem_distributions_comp.png'
+    plt.savefig(figname, dpi=300); plt.close()
     
     #import ipdb;ipdb.set_trace()
     print()
@@ -151,17 +164,19 @@ if __name__ == '__main__':
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
     update_file = '../meta/update_cellID_00001-50212.csv'
 
-    if 1:
+    if 0:
         fn = 'N_stem'
         check_extreme_neurons(gf_file, meta_file, update_file, fn, display=True)
 
-    if 0:
+    if 1:
+        processed = True
         datasets = {
-            'SEU-H8K': '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv',
-            'DeKock': '../resources/public_data/DeKock/intermediates/gf_one_point_soma_150um.csv',
-            'Allen': '../resources/public_data/allen_human_neuromorpho/intermediates/gf_one_point_soma_150um.csv',
-            'H01-Skel': './data/lmeausre_pyramidal_dendrites_annotation.csv',
+            'SEU-H8K': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um.csv',
+            'DeKock': '../../resources/public_data/DeKock/intermediates/gf_one_point_soma_150um.csv',
+            'Allen': '../../resources/public_data/allen_human_neuromorpho/intermediates/gf_one_point_soma_150um.csv',
+            'H01-Skel': '../data/lmeausre_pyramidal_dendrites_annotation.csv',
             #'Mouse-9K': '../../../parcellation/BrainParcellation/microenviron/plotters/me_proj/data/lm_features_dendrites100.csv'
+            'SEU-H8K\n(H01-modeled)': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv',
         }
-        plot_stem_distributions(datasets)
+        plot_stem_distributions(datasets, processed=processed)
 
