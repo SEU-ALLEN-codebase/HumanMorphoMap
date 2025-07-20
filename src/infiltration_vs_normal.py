@@ -30,7 +30,7 @@ def get_stars(p):
     else: return 'n.s.(≥0.1)'
 
 
-def _plot_separate_feagures(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2.0):
+def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2.0, pt_code_n=None):
     gfs_cur = gfs_cur.copy()
     sns.set_theme(style='ticks', font_scale=1.8)
     display_features = {
@@ -78,10 +78,16 @@ def _plot_separate_feagures(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
     axes = axes.flatten()
 
     if hue_name == 'tissue_type':
-        colors_pal = {
-            'normal': 'lightcoral', 
-            'infiltration': 'gold'
-        }
+        #if pt_code_n is None:
+        #    colors_pal = {
+        #        'normal': 'lightcoral', 
+        #        'infiltration': 'gold'
+        #    }
+        #else:
+            colors_pal = {
+                'normal': 'lightcoral', 
+                'infiltration': 'gold'
+            }
     else:
         colors_pal = None
     
@@ -160,6 +166,8 @@ def _plot_separate_feagures(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         ax.tick_params(axis='y', direction='in')
         ax.set_xticks([0, 1])
         #ax.set_xticklabels(('<= 5', '> 5'), ha="center")
+        if pt_code_n is not None:
+            ax.set_xticklabels([pt_code_n.split('-')[0].replace('000', ''), 'infiltration'])
         
         # bold
         ax.spines['left'].set_linewidth(2)
@@ -173,7 +181,11 @@ def _plot_separate_feagures(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         axes[j].axis('off')
 
     plt.tight_layout()
-    figname = f'morph_vs_{hue_name}_{ctype}.png'
+    if pt_code_n is None:
+        figname = f'morph_vs_{hue_name}_{ctype}.png'
+    else:
+        figname = f'morph_vs_{hue_name}_{ctype}_{pt_code_n}.png'
+
     plt.savefig(figname, dpi=300)
     plt.close()
 
@@ -189,8 +201,8 @@ def jointfplot(data, x, y, xlim, ylim, hue, out_fig, markersize=10,
     sns.set_theme(style='ticks', font_scale=1.8)
 
     # Statistics
-    print(data.groupby(hue_name, observed=False)['pt_code'].nunique())
-    print(np.unique(data[hue_name], return_counts=True))
+    print(data.groupby(hue, observed=False)['pt_code'].nunique())
+    print(np.unique(data[hue], return_counts=True))
 
     # Set defaults
     if hue_order is None:
@@ -531,14 +543,30 @@ def morphology_difference_between_infiltration_normal(
             gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
             print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
         
-            # visualization
-            #_plot_separate_feagures(gfs_cur, ctype=ctype)
-            import ipdb; ipdb.set_trace()
+            ############ Overall statistic tests for each feature
+            #_plot_separate_features(gfs_cur, ctype=ctype)
 
-            # 2D feature distribution
+            ############ statistical test for neuronal subsets
+            if ctype == 'pyramidal':
+                pt_n, pt_c = np.unique(gfs_cur[gfs_cur.tissue_type == 'normal'].pt_code, 
+                                         return_counts=True)
+                pt_argsort_ids = np.argsort(pt_c)[::-1]
+                print(dict(zip(pt_n, pt_c)))
+                infil_tissues = np.unique(gfs_cur[gfs_cur.tissue_type == 'infiltration'].pt_code).tolist()
+                
+                ntest = 2
+                for iptn in pt_argsort_ids[:ntest]:
+                    pt_code = pt_n[iptn]
+                    pt_count = pt_c[iptn]
+                    gfs_subset = gfs_cur[gfs_cur.pt_code.isin(infil_tissues + [pt_code])].copy()
+                    gfs_subset
+
+                    _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
+
+            ############ 2D feature distribution
             out_fig = f'feature_distribution_{ctype}.png'
             jointfplot(gfs_cur, x='Soma_surface', y='Average Diameter', xlim=(100,3000), 
-                       ylim=(2.5, 4.8), hue_name='tissue_type', out_fig=out_fig, 
+                       ylim=(2.5, 4.8), hue='tissue_type', out_fig=out_fig, 
                        markersize=25, hue_order=None, palette=None)
 
             #plot_joint_distribution(gfs_cur, 'tissue_type')
