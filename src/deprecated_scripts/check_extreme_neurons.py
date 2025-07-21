@@ -106,7 +106,7 @@ def check_extreme_neurons(gf_file, meta_file, update_file, fn, pn=0.95, display=
 def plot_stem_distributions(datasets, processed=False):
     nstems = {}
     for dk, dv in datasets.items():
-        if (dk == 'SEU-H8K\n(H01-modeled)') and (not processed):
+        if (dk == 'ACT-H8K\n(H01-guided)') and (not processed):
             continue
         
         print(f'--> {dk}')
@@ -171,12 +171,12 @@ if __name__ == '__main__':
     if 1:
         processed = True
         datasets = {
-            'SEU-H8K': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um.csv',
+            'ACT-H8K': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um.csv',
             'DeKock': '../../resources/public_data/DeKock/intermediates/gf_one_point_soma_150um.csv',
             'Allen': '../../resources/public_data/allen_human_neuromorpho/intermediates/gf_one_point_soma_150um.csv',
             'H01-Skel': '../data/lmeausre_pyramidal_dendrites_annotation.csv',
             #'Mouse-9K': '../../../parcellation/BrainParcellation/microenviron/plotters/me_proj/data/lm_features_dendrites100.csv'
-            'SEU-H8K\n(H01-modeled)': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv',
+            'ACT-H8K\n(H01-guided)': '../../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv',
         }
         plot_stem_distributions(datasets, processed=processed)
 

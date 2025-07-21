@@ -386,7 +386,7 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
         # 设置绘图风格
         plt.figure(figsize=(6, 6))
         sns.set_theme(style='ticks', font_scale=1.6)
-        palette = {'H01-Skel': '#1f77b4', 'SEU-H8K': '#ff7f0e', 'SEU-H8K\n(H01-modeled)': '#2ca02c'}  # 自定义颜色
+        palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K\n(H01-guided)': '#2ca02c'}  # 自定义颜色
 
         # 创建绘图对象
         ax = plt.gca()
@@ -607,8 +607,8 @@ def plot_outlier_statis(proportion_df):
         }
     )
 
-    plt.xlabel('Number of anomaly stems in SEU-H8K')
-    plt.ylabel('Number of stems within a neuron in SEU-H8K')
+    plt.xlabel('Number of anomaly stems in ACT-H8K')
+    plt.ylabel('Number of stems within a neuron in ACT-H8K')
 
     plt.savefig('t1.png', dpi=600)
     plt.close()
@@ -826,12 +826,12 @@ if __name__ == '__main__':
         best_n = 11 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
-    if 0:
+    if 1:
         swc_dirs = [h01_dir, auto_dir, './data/auto8.4k_0510_resample1um_mergedBranches0712']
         ang_files = [h01_ang_file, auto_ang_file, 
                      './data/auto8.4k_0510_resample1um_mergedBranches0712_angles.pkl'
                     ]
-        datasets = ['H01-Skel', 'SEU-H8K', 'SEU-H8K\n(H01-modeled)']
+        datasets = ['H01-Skel', 'ACT-H8K', 'ACT-H8K\n(H01-guided)']
 
         # visualize the spatial distributions
         plot_spatial_angles(swc_dirs, ang_files, datasets)
