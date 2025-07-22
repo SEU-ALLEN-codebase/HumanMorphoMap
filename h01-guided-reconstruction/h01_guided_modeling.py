@@ -373,7 +373,6 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
             with open(ang_file, 'wb') as fp:
                 pickle.dump(angles_dict, fp)
 
-
     if 1:
         # 准备数据为DataFrame
         data_list = []
@@ -384,8 +383,8 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
         df = pd.DataFrame(data_list)
 
         # 设置绘图风格
-        plt.figure(figsize=(6, 6))
-        sns.set_theme(style='ticks', font_scale=1.6)
+        plt.figure(figsize=(11, 6))
+        sns.set_theme(style='ticks', font_scale=1.8)
         palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K\n(H01-guided)': '#2ca02c'}  # 自定义颜色
 
         # 创建绘图对象
@@ -401,34 +400,38 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
                 fill=True,
                 alpha=0.1,
                 bw_adjust=0.5,
+                common_norm=False,
+                cut=0,
                 ax=ax
             )
 
         # 添加辅助元素
         plt.xlabel('Inter-stem angle (degrees)')
-        plt.ylabel('Density')
+        plt.ylabel('Probability density')
         #plt.title('Comparison of Branch Angle Distributions', pad=5)
         #plt.grid(axis='y', linestyle='--', alpha=0.4)
 
-        # 调整图例
-        ax.legend(
+        # 调整图例：将图例放在图像右侧外面
+        legend = ax.legend(
             title='Dataset',
-            frameon=False,
+            frameon=True,
             facecolor='white',
-            loc='upper left'
+            loc='upper left',          # 图例的锚点位置
+            bbox_to_anchor=(1.05, 1),  # 将图例移到图像右侧外面
+            borderaxespad=0.           # 图例与图像的间距
         )
 
-        # 设置坐标轴范围
-        xmax = 50
-        plt.xlim(0, xmax)
-        plt.ylim(0, 0.008)
-        plt.xticks(np.arange(0, xmax+1, 10))
-        plt.yticks([0, 0.002, 0.004, 0.006, 0.008])
+        # 设置图例外框样式
+        frame = legend.get_frame()
+        frame.set_edgecolor('black')  # 黑色边框
+        frame.set_linestyle('--')    # 虚线样式
+        frame.set_linewidth(1.5)     # 边框线宽
 
-        plt.tight_layout()
+        # 调整布局，为图例留出空间
+        plt.tight_layout(rect=[0, 0, 0.85, 1])  # 右侧留出15%的空间给图例
+        # 调整布局，为图例留出空间
         plt.savefig('angle_distribution_comparison.png', dpi=300, bbox_inches='tight')
         plt.close()
-    
 
     
 # 2. 基于BIC选择最佳n_components
@@ -822,7 +825,7 @@ if __name__ == '__main__':
         else:
             calc_features_all(auto_dir, out_csv=auto_feat_file)
     
-    if 1:
+    if 0:
         best_n = 11 # estimated using `select_best_components` # 55
         detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
     
