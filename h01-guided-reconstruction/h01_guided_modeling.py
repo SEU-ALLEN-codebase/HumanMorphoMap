@@ -328,7 +328,8 @@ def calc_features_all(swc_dir, out_csv=None, visualize=True):
             axes[j].set_visible(False)
 
         #plt.tight_layout()
-        plt.savefig(f'feature_distribution_{out_csv}.png', dpi=300)
+        csv_prefix = os.path.split(out_csv)[-1]
+        plt.savefig(f'feature_distribution_{csv_prefix}.png', dpi=300)
 
     return merged_df
 
@@ -670,7 +671,10 @@ def plot_label_diff(feats_auto):
 
 
 
-def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, max_iter=10):
+def detect_outlier_stems(
+            h01_feat_file, auto_feat_file, swc_dir, cache_dataset_flag='h01', 
+            best_n=None, max_iter=10, visualize=True
+):
     # 1. 加载数据
     feats_h01 = pd.read_csv(h01_feat_file, index_col=0)[_USE_FEATURES]
     feats_auto_orig = pd.read_csv(auto_feat_file, index_col=0)
@@ -690,14 +694,13 @@ def detect_outlier_stems(h01_feat_file, auto_feat_file, swc_dir, best_n=None, ma
 
     icur = 1
     
-    output_swc_dir = f'cache/h01_round{icur}'
+    output_swc_dir = f'cache/{cache_dataset_flag}_round{icur}'
     # make sure all cached files are deleted! 
     os.system(f'rm -rf {output_swc_dir}')
 
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
-    visualize = True
     while icur <= max_iter:
         print(f'\n==> Total stems: {feats_auto_orig.shape[0]}')
         # 5. 计算异常分数
@@ -818,18 +821,33 @@ if __name__ == '__main__':
     auto_feat_file = './data/auto8.4k_0510_resample1um_stem_features.csv'
     auto_ang_file = './data/auto8.4k_0510_resample1um_angles.pkl'
 
-    if 0:
-        dataset = 'h01'
+    ##### For reconstructions on test set from different methods
+    method = 'skelrec'
+    test_info = {
+        'swc_dir': f'/data2/kfchen/tracing_ws/14k_raw_img_data/0722_origin_swc/{method}',
+        'feat_ang_file': f'test232/stem_features/{method}_stem_features.csv'
+    }
+
+    if 1:
+        dataset = method #'h01'
         if dataset == 'h01':
             calc_features_all(h01_dir, out_csv=h01_feat_file)
-        else:
+        elif dataset == 'auto':
             calc_features_all(auto_dir, out_csv=auto_feat_file)
-    
-    if 0:
-        best_n = 11 # estimated using `select_best_components` # 55
-        detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
+        else:
+            calc_features_all(test_info['swc_dir'], out_csv=test_info['feat_ang_file'])
     
     if 1:
+        best_n = 11 # estimated using `select_best_components`
+        #detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
+
+        ####### inference on different methods on test set
+        detect_outlier_stems(
+                h01_feat_file, test_info['feat_ang_file'], test_info['swc_dir'], 
+                cache_dataset_flag=method, best_n=best_n, visualize=False
+        )
+    
+    if 0:
         swc_dirs = [h01_dir, auto_dir, './data/auto8.4k_0510_resample1um_mergedBranches0712']
         ang_files = [h01_ang_file, auto_ang_file, 
                      './data/auto8.4k_0510_resample1um_mergedBranches0712_angles.pkl'

@@ -56,11 +56,17 @@ if __name__ == '__main__':
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
         #outfile = 'gf_H01_resample1um_prune25um.csv'
     
-        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
-        outfile = 'auto8.4k_0510_resample1um_mergedBranches0712.csv'
+        #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
+        #outfile = 'auto8.4k_0510_resample1um_mergedBranches0712.csv'
 
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/manual_resampled1um'
         #outfile = 'manual_resampled1um.csv'
+
+        ##### for comparison on test-set
+        method = 'skelrec'
+        swc_dir = f'/data2/kfchen/tracing_ws/14k_raw_img_data/0722_origin_swc/{method}'
+        outfile = f'test232/lmeasure/gf_original_{method}.csv'
+
         nprocessors = 16
         calc_global_features_from_folder(swc_dir, outfile, nprocessors=nprocessors, timeout=360)
 
