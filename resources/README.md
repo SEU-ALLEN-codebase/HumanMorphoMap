@@ -2,8 +2,8 @@
 Publicly shareable data resources.
 
 ## Directory Structure  
-├── DeKock/ # Mohan et al., 10.25493/ZK52-E1B
-└── allen_human_neuromorpho/ # Berg et al., 10.1038/s41586-021-03813-8
+├── DeKock/ # Mohan et al., 10.25493/ZK52-E1B  
+└── allen_human_neuromorpho/ # Berg et al., 10.1038/s41586-021-03813-8  
 
 For each dataset, we provide exploratory analysis scripts in **`analyze_allen_features.py`**, which includes:
 - Feature distribution visualization

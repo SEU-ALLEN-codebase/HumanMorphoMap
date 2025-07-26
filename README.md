@@ -14,11 +14,11 @@ This project aims to:
 ✔️ Morphological analyses across various conditions 
 
 ## Repository Structure  
-├── h01-guided-reconstruction/ # H01 dataset-guided morphology refinement
-├── meta/ # Project metadata and schemas
-├── resources/public_data/ # publicly downloaded morphological datasets
-├── spatial_transcript_seu/ # Spatial transcriptomics analysis
-├── src/ # Core computational pipelines
+├── h01-guided-reconstruction/ # H01 dataset-guided morphology refinement  
+├── meta/ # Project metadata and schemas  
+├── resources/public_data/ # publicly downloaded morphological datasets  
+├── spatial_transcript_seu/ # Spatial transcriptomics analysis  
+├── src/ # Core computational pipelines  
 
 ## Installation and dependency
 - First, download the project
