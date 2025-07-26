@@ -536,15 +536,19 @@ def morphology_difference_between_infiltration_normal(
     })
 
 
-
     if 1:
         # Morphological feature difference between normal and infiltrated pyr and non-pyr cells
+        use_only_glioblastoma = False   # glioblastoma is also a subtype of glioma
         for ctype_id, ctype in ctype_dict.items():
             gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
+            if (ctype == 'pyramidal') and use_only_glioblastoma:
+                # 'P00064-T001', 'P00077-T001' are glioma
+                gfs_cur = gfs_cur[~gfs_cur.pt_code.isin(['P00064-T001', 'P00077-T001'])]
+
             print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
         
             ############ Overall statistic tests for each feature
-            #_plot_separate_features(gfs_cur, ctype=ctype)
+            _plot_separate_features(gfs_cur, ctype=ctype)
 
             ############ statistical test for neuronal subsets
             if ctype == 'pyramidal':
@@ -562,6 +566,16 @@ def morphology_difference_between_infiltration_normal(
                     gfs_subset
 
                     _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
+
+            
+            ############ difference among infiltrated neurons from different lobes ##############
+            if ctype == 'pyramidal':
+                # The meta is not that standardized, hand-craft it
+                gfs_tmp = gfs_cur[(gfs_cur.tissue_type == 'infiltration') & 
+                                  (gfs_cur.region.isin(['TL.L', 'PL.L_OL.L']))]
+
+                _plot_separate_features(gfs_tmp, ctype=ctype, hue_name='region', ylim_scale=2.5, pt_code_n=None)
+
 
             ############ 2D feature distribution
             out_fig = f'feature_distribution_{ctype}.png'
