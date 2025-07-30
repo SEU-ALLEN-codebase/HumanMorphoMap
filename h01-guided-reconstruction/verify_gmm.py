@@ -144,10 +144,10 @@ if 1:
         plt.close()
 
     # find out the neurons with large distance and save the reconstruction-overlaid images
-    percentile = 95
+    percentile = 98
     image_dir = '/data2/kfchen/tracing_ws/14k_raw_img_data/tif'
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
-    display_range = 20  # radius in um
+    display_len = 40  # radius in um
 
 
     def blend_image(img2d, swc_file, xxyy=None):
@@ -165,7 +165,7 @@ if 1:
         alpha = np.expand_dims(alpha, axis=2)
 
         blended = (morph_rgb * alpha + img2d_c3 * (1 - alpha)).astype(np.uint8)
-        return blended
+        return blended, na.soma_xyz
 
     def image_enhancing(img2d):
         mean_i = img2d.mean()
@@ -185,7 +185,8 @@ if 1:
     # we should get the resolution
     meta = pd.read_csv(meta_file, index_col='cell_id', low_memory=False, encoding='gbk')
     # plot the images, with swc skeleton overlaid
-    for swc_name in neurons_large_dists.index:
+    for iswc, swc_name in enumerate(tqdm(neurons_large_dists.index)):
+        print(iswc, swc_name)
         swc_id = int(swc_name.split('_')[0])
         init_swc = os.path.join(init_dir, swc_name)
         final_swc = os.path.join(final_dir, swc_name)
@@ -198,16 +199,30 @@ if 1:
         img2d = cv2.flip(img2d, flipCode=0)
         # hue normalization of image
         img2d = image_enhancing(img2d)
+        
         rez_xy = meta.loc[swc_id, 'xy_resolution'] / 1000.
         ymax, xmax = np.array(img2d.shape) * rez_xy
         xxyy = (0, xmax, 0, ymax)
 
-        blended_init = blend_image(img2d, init_swc, xxyy=xxyy)
-        blended_final = blend_image(img2d, final_swc, xxyy=xxyy)
+        blended_init, sxyz = blend_image(img2d, init_swc, xxyy=xxyy)
+        blended_final, _ = blend_image(img2d, final_swc, xxyy=xxyy)
+
+        # crop a soma-centered subregion for zoom-in view
+        display_len_pixel = int(np.round(display_len / rez_xy))
+        xy_pixel = np.round(np.array(sxyz[:2]) / rez_xy).astype(int)
+        
+        xmin, ymin = np.maximum(xy_pixel - display_len_pixel, 0)
+        xmax, ymax = np.minimum(xy_pixel + display_len_pixel, img2d.shape[::-1])
+
+        blended_init_sub = blended_init[ymin:ymax, xmin:xmax]
+        blended_final_sub = blended_final[ymin:ymax, xmin:xmax]
+
         # merge
-        stacked_image = np.hstack((blended_init, blended_final))
-        cv2.imwrite('stacked_image.png', stacked_image)
-        break
+        stacked_image = np.hstack((blended_init_sub, blended_final_sub))
+        cv2.imwrite(f'{swc_name[:-4]}.png', stacked_image)
+        
+        #if iswc == 20:
+        #    break
         
 
         
