@@ -151,7 +151,7 @@ if 1:
     display_len = 40  # radius in um
 
 
-    def blend_image(img2d_c3, swc_file, xxyy=None, soma_params=None):
+    def blend_image(img2d_c3, swc_file, xxyy=None, soma_params=None, scalef=1.0):
         # neurite image
         if soma_params is not None:
             sparams = {k:v for k,v in soma_params.items()}
@@ -159,14 +159,14 @@ if 1:
                 # soma radius
                 soma = get_soma_from_swc(swc_file)
                 srad = float(soma[5])
-                sparams['size'] = srad
+                sparams['size'] = srad * scalef
         else:
             sparams = None
 
-        na = NeuriteArbors(swc_file, soma_params=sparams)
+        na = NeuriteArbors(swc_file, soma_params=sparams, scalef=scalef)
         morph2d = na.get_morph_mip(
                 type_id=None, img_shape=img2d_c3.shape[:2], xxyy=xxyy, bkg_transparent=True,
-                color='blue'
+                color='red'
         )
 
         # blending the images
@@ -178,10 +178,10 @@ if 1:
 
         return blended, na.soma_xyz
 
-    def image_enhancing(img2d):
+    def image_enhancing(img2d, sigma=4):
         mean_i = img2d.mean()
         std_i = img2d.std()
-        std_i3 = std_i * 3
+        std_i3 = std_i * sigma
 
         new_img = img2d.astype(float)
         np.clip(new_img, mean_i-std_i3, mean_i+std_i3, new_img)
@@ -192,7 +192,7 @@ if 1:
 
     def save_comp_image(
                 swc_name, init_dir, final_dir, image_dir, meta, 
-                show_raw_image=False, soma_params=None, scalef=2
+                show_raw_image=False, soma_params=None, scalef=1.0
     ):
         swc_id = int(swc_name.split('_')[0])
         init_swc = os.path.join(init_dir, swc_name)
@@ -207,20 +207,22 @@ if 1:
         # hue normalization of image
         img2d = image_enhancing(img2d)
         img2d_c3 = cv2.cvtColor(img2d, cv2.COLOR_GRAY2BGR)
+        if scalef != 1.0:
+            img2d_c3 = cv2.resize(img2d_c3, (0,0), fx=scalef, fy=scalef)
         
         rez_xy = meta.loc[swc_id, 'xy_resolution'] / 1000.
-        ymax, xmax = np.array(img2d.shape) * rez_xy
+        ymax, xmax = np.array(img2d.shape) * rez_xy * scalef
         xxyy = (0, xmax, 0, ymax)
 
-        blended_init, sxyz = blend_image(img2d_c3, init_swc, xxyy=xxyy, soma_params=soma_params)
-        blended_final, _ = blend_image(img2d_c3, final_swc, xxyy=xxyy, soma_params=soma_params)
+        blended_init, sxyz = blend_image(img2d_c3, init_swc, xxyy=xxyy, soma_params=soma_params, scalef=scalef)
+        blended_final, _ = blend_image(img2d_c3, final_swc, xxyy=xxyy, soma_params=soma_params, scalef=scalef)
 
         # crop a soma-centered subregion for zoom-in view
-        display_len_pixel = int(np.round(display_len / rez_xy))
+        display_len_pixel = int(np.round(display_len / rez_xy * scalef))
         xy_pixel = np.round(np.array(sxyz[:2]) / rez_xy).astype(int)
         
         xmin, ymin = np.maximum(xy_pixel - display_len_pixel, 0)
-        xmax, ymax = np.minimum(xy_pixel + display_len_pixel, img2d.shape[::-1])
+        xmax, ymax = np.minimum(xy_pixel + display_len_pixel, img2d_c3.shape[:2][::-1])
 
         blended_init_sub = blended_init[ymin:ymax, xmin:xmax]
         blended_final_sub = blended_final[ymin:ymax, xmin:xmax]
@@ -230,6 +232,7 @@ if 1:
             stacked_image = np.hstack((img2d_c3[ymin:ymax, xmin:xmax], blended_init_sub, blended_final_sub))
         else:
             stacked_image = np.hstack((blended_init_sub, blended_final_sub))
+        print(stacked_image.shape)
         cv2.imwrite(f'{swc_name[:-4]}.png', stacked_image)
 
 
@@ -256,11 +259,11 @@ if 1:
     ]
         
     soma_params = {
-        'color': 'royalblue',
-        'alpha': 0.95,
+        'color': 'gray',
+        'alpha': 0.75,
     }
     for swc_name in swc_names:
-        save_comp_image(swc_name, init_dir, final_dir, image_dir, meta, show_raw_image=True, soma_params=soma_params)
+        save_comp_image(swc_name, init_dir, final_dir, image_dir, meta, show_raw_image=True, soma_params=soma_params, scalef=2.)
     
 
 
