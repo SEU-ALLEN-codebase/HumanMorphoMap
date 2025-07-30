@@ -73,6 +73,7 @@ if 1:
     from file_io import load_image
     from image_utils import get_mip_image
     from plotters.neurite_arbors import NeuriteArbors
+    from swc_handler import get_soma_from_swc
 
 
     init_dir = './data/auto8.4k_0510_resample1um'
@@ -150,21 +151,31 @@ if 1:
     display_len = 40  # radius in um
 
 
-    def blend_image(img2d, swc_file, xxyy=None):
+    def blend_image(img2d_c3, swc_file, xxyy=None, soma_params=None):
         # neurite image
-        na = NeuriteArbors(swc_file)
+        if soma_params is not None:
+            sparams = {k:v for k,v in soma_params.items()}
+            if 'size' not in sparams:
+                # soma radius
+                soma = get_soma_from_swc(swc_file)
+                srad = float(soma[5])
+                sparams['size'] = srad
+        else:
+            sparams = None
+
+        na = NeuriteArbors(swc_file, soma_params=sparams)
         morph2d = na.get_morph_mip(
-                type_id=None, img_shape=img2d.shape, xxyy=xxyy, bkg_transparent=True,
+                type_id=None, img_shape=img2d_c3.shape[:2], xxyy=xxyy, bkg_transparent=True,
                 color='blue'
         )
 
         # blending the images
-        img2d_c3 = cv2.cvtColor(img2d, cv2.COLOR_GRAY2BGR)
         morph_rgb = morph2d[:, :, :3]
         alpha = morph2d[:, :, 3].astype(np.float32) / 255.0
         alpha = np.expand_dims(alpha, axis=2)
 
         blended = (morph_rgb * alpha + img2d_c3 * (1 - alpha)).astype(np.uint8)
+
         return blended, na.soma_xyz
 
     def image_enhancing(img2d):
@@ -178,15 +189,11 @@ if 1:
         # normalization
         new_img = ((new_img - new_img.min()) / (new_img.max() - new_img.min() + 1e-6) * 255.).astype(np.uint8)
         return new_img
-    
 
-    dist_percentile = np.percentile(df_dists_neuron.dists, percentile)
-    neurons_large_dists = df_dists_neuron[df_dists_neuron.dists > dist_percentile]
-    # we should get the resolution
-    meta = pd.read_csv(meta_file, index_col='cell_id', low_memory=False, encoding='gbk')
-    # plot the images, with swc skeleton overlaid
-    for iswc, swc_name in enumerate(tqdm(neurons_large_dists.index)):
-        print(iswc, swc_name)
+    def save_comp_image(
+                swc_name, init_dir, final_dir, image_dir, meta, 
+                show_raw_image=False, soma_params=None, scalef=2
+    ):
         swc_id = int(swc_name.split('_')[0])
         init_swc = os.path.join(init_dir, swc_name)
         final_swc = os.path.join(final_dir, swc_name)
@@ -199,13 +206,14 @@ if 1:
         img2d = cv2.flip(img2d, flipCode=0)
         # hue normalization of image
         img2d = image_enhancing(img2d)
+        img2d_c3 = cv2.cvtColor(img2d, cv2.COLOR_GRAY2BGR)
         
         rez_xy = meta.loc[swc_id, 'xy_resolution'] / 1000.
         ymax, xmax = np.array(img2d.shape) * rez_xy
         xxyy = (0, xmax, 0, ymax)
 
-        blended_init, sxyz = blend_image(img2d, init_swc, xxyy=xxyy)
-        blended_final, _ = blend_image(img2d, final_swc, xxyy=xxyy)
+        blended_init, sxyz = blend_image(img2d_c3, init_swc, xxyy=xxyy, soma_params=soma_params)
+        blended_final, _ = blend_image(img2d_c3, final_swc, xxyy=xxyy, soma_params=soma_params)
 
         # crop a soma-centered subregion for zoom-in view
         display_len_pixel = int(np.round(display_len / rez_xy))
@@ -218,15 +226,41 @@ if 1:
         blended_final_sub = blended_final[ymin:ymax, xmin:xmax]
 
         # merge
-        stacked_image = np.hstack((blended_init_sub, blended_final_sub))
+        if show_raw_image:
+            stacked_image = np.hstack((img2d_c3[ymin:ymax, xmin:xmax], blended_init_sub, blended_final_sub))
+        else:
+            stacked_image = np.hstack((blended_init_sub, blended_final_sub))
         cv2.imwrite(f'{swc_name[:-4]}.png', stacked_image)
-        
-        #if iswc == 20:
-        #    break
-        
 
-        
+
+    dist_percentile = np.percentile(df_dists_neuron.dists, percentile)
+    neurons_large_dists = df_dists_neuron[df_dists_neuron.dists > dist_percentile]
+    # we should get the resolution
+    meta = pd.read_csv(meta_file, index_col='cell_id', low_memory=False, encoding='gbk')
+
     
+    # For all neurons: plot the images, with swc skeleton overlaid
+    #for iswc, swc_name in enumerate(tqdm(neurons_large_dists.index)):
+    #    print(iswc, swc_name)
+    #    save_comp_image(swc_name, init_dir, final_dir, image_dir, meta)
+        
+        
+    # plot only required neurons
+    swc_names = [
+        '00717_P005_T01-S011_MFG_R0368_LJ-20220525_LJ.swc',
+        '00985_P010_T01-S017_TP_R0490_LJ-20220607_YXQ.swc',
+        '01032_P010_T01-S020_TP_R0613_LJ-20220607_YXQ.swc',
+        '02820_P025_T01_-S034_LTL_R0613_RJ-20230201_YS.swc',
+        '03358_P023_T01_-S007_LIFG_R0613_LJ-20221127_LD.swc',
+        '08495_P051_T02_(2)_S013_-_FL.R_R0919_RJ_20230814_RJ.swc'
+    ]
+        
+    soma_params = {
+        'color': 'royalblue',
+        'alpha': 0.95,
+    }
+    for swc_name in swc_names:
+        save_comp_image(swc_name, init_dir, final_dir, image_dir, meta, show_raw_image=True, soma_params=soma_params)
     
 
 
