@@ -30,9 +30,9 @@ if 1:
     sns.set_theme(style='ticks', font_scale=1.7)
 
     # 1. 读取数据
-    auto_df = pd.read_csv('auto8.4k_0510_pruned_resample1um.csv')
-    manual_df = pd.read_csv('manual_resampled1um.csv')
-    test_ids = pd.read_csv('test232.csv')
+    auto_df = pd.read_csv('../auto8.4k_0510_resample1um_mergedBranches0712.csv')
+    manual_df = pd.read_csv('../manual_resampled1um_renamed.csv')
+    test_ids = pd.read_csv('../test232.csv')
 
     # 2. 提取测试集数据
     auto_test = auto_df[auto_df['ID'].isin(test_ids['ID'])]
@@ -45,9 +45,12 @@ if 1:
     # 3. 计算相对值（manual/auto）
     # 排除ID列和非数值列（如果有）
     features = auto_test.columns.difference(['ID'])
-    sel_features = ['N_stem', 'Number of Bifurcations', 'Number of Branches', 'Number of Tips', 
-                    'Width', 'Height', 'Depth', 'Length', 'Max Euclidean Distance', 
-                    'Max Path Distance', 'Max Branch Order']
+    #sel_features = ['N_stem', 'Number of Bifurcations', 'Number of Branches', 'Number of Tips', 
+    #                'Width', 'Height', 'Depth', 'Length', 'Max Euclidean Distance', 
+    #                'Max Path Distance', 'Max Branch Order']
+    sel_features = ['Stems', 'Bifurcations', 'Branches', 'Tips', 
+                    'OverallWidth', 'OverallHeight', 'OverallDepth', 'Length', 'MaxEuclideanDistance', 
+                    'MaxPathDistance', 'MaxBranchOrder']
     features = [feat for feat in features if feat in sel_features]
     ratio_df = pd.DataFrame()
 

@@ -10,10 +10,11 @@ import seaborn as sns
 from global_features import calc_global_features_from_folder
 
 
-def compare_features():
+def compare_features(manual_file='gf_H01_resample1um_prune25um.csv',
+                     auto_file='auto8.4k_0510_pruned_resample1um.csv'):
     # 读取两个CSV文件
-    df1 = pd.read_csv('gf_H01_resample1um_prune25um.csv', index_col=0)
-    df2 = pd.read_csv('auto8.4k_0510_pruned_resample1um.csv', index_col=0)
+    df1 = pd.read_csv(manual_file, index_col=0)
+    df2 = pd.read_csv(auto_file, index_col=0)
 
     # 提取特征列（排除第一列的名称列）
     #features = df1.columns
@@ -51,7 +52,7 @@ def compare_features():
     plt.close()
 
 if __name__ == '__main__':
-    if 1:
+    if 0:
         # calculate global features
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
         #outfile = 'gf_H01_resample1um_prune25um.csv'
@@ -70,6 +71,6 @@ if __name__ == '__main__':
         nprocessors = 16
         calc_global_features_from_folder(swc_dir, outfile, nprocessors=nprocessors, timeout=360)
 
-    if 0:
+    if 1:
         compare_features()
 
