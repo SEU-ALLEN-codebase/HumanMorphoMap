@@ -386,7 +386,7 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
         # 设置绘图风格
         plt.figure(figsize=(11, 6))
         sns.set_theme(style='ticks', font_scale=1.8)
-        palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K\n(H01-guided)': '#2ca02c'}  # 自定义颜色
+        palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K-O': '#2ca02c'}  # 自定义颜色
 
         # 创建绘图对象
         ax = plt.gca()
@@ -408,7 +408,7 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
 
         # 添加辅助元素
         plt.xlabel('Inter-stem angle (degrees)')
-        plt.ylabel('Probability density')
+        plt.ylabel('Density')
         #plt.title('Comparison of Branch Angle Distributions', pad=5)
         #plt.grid(axis='y', linestyle='--', alpha=0.4)
 
@@ -421,6 +421,7 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
             bbox_to_anchor=(1.05, 1),  # 将图例移到图像右侧外面
             borderaxespad=0.           # 图例与图像的间距
         )
+        ax.set_xlim(0, 50)
 
         # 设置图例外框样式
         frame = legend.get_frame()
@@ -555,16 +556,17 @@ def plot_outlier_distribution(auto_scores, threshold):
     else:
         scalef = 0.99
 
-    ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
-                xy=(threshold, 0),
-                xytext=(threshold*scalef, ax.get_ylim()[1]*0.5))#,
+    #ax.annotate(f'{np.mean(auto_scores > threshold):.1%} anomalies',
+    #            xy=(threshold, 0),
+    #            xytext=(threshold*scalef, ax.get_ylim()[1]*0.5))#,
                 #arrowprops=dict(arrowstyle='->'),
                 #bbox=dict(boxstyle='round', fc='white'))
+    print(f'Percentage of anomalies: {np.mean(auto_scores > threshold):.2%}')
 
     # 格式调整
-    ax.set(xlabel='Anomaly Score', 
+    ax.set(xlabel='Predicted GMM score', 
            ylabel='Proportion',
-           title='Predicted Anomaly Distribution\nusing GMM model')
+           title='Anomaly Distribution')
     sns.despine()
     plt.xlim(aligned_bins[0], aligned_bins[-1])
     plt.tight_layout()
@@ -692,12 +694,11 @@ def detect_outlier_stems(
     # 4. 初始化阈值和迭代参数
     threshold = np.percentile(-gmm.score_samples(feats_h01_scaled), 95)
 
+    ###### Iterative pruning
     icur = 1
-    
     output_swc_dir = f'cache/{cache_dataset_flag}_round{icur}'
     # make sure all cached files are deleted! 
     os.system(f'rm -rf {output_swc_dir}')
-
     os.makedirs(output_swc_dir, exist_ok=True)
 
     input_swc_dir = swc_dir
@@ -806,8 +807,8 @@ def detect_outlier_stems(
         # Evaluate the statistics of outliers
         plot_outlier_statis(proportion_df)
 
-        plot_label_diff(feats_auto)
-    
+        #plot_label_diff(feats_auto)
+
     return feats_auto
         
 
@@ -828,7 +829,7 @@ if __name__ == '__main__':
         'feat_ang_file': f'test232/stem_features/{method}_stem_features.csv'
     }
 
-    if 1:
+    if 0:
         dataset = method #'h01'
         if dataset == 'h01':
             calc_features_all(h01_dir, out_csv=h01_feat_file)
@@ -837,22 +838,26 @@ if __name__ == '__main__':
         else:
             calc_features_all(test_info['swc_dir'], out_csv=test_info['feat_ang_file'])
     
-    if 1:
+    if 0:
         best_n = 11 # estimated using `select_best_components`
-        #detect_outlier_stems(h01_feat_file, auto_feat_file, auto_dir, best_n=best_n)
+        visualize = True    # whether do actual pruning or just plotting
+        detect_outlier_stems(
+            h01_feat_file, auto_feat_file, auto_dir, best_n=best_n,
+            visualize=visualize
+        )
 
         ####### inference on different methods on test set
-        detect_outlier_stems(
-                h01_feat_file, test_info['feat_ang_file'], test_info['swc_dir'], 
-                cache_dataset_flag=method, best_n=best_n, visualize=False
-        )
+        #detect_outlier_stems(
+        #        h01_feat_file, test_info['feat_ang_file'], test_info['swc_dir'], 
+        #        cache_dataset_flag=method, best_n=best_n, visualize=visualize
+        #)
     
-    if 0:
+    if 1:
         swc_dirs = [h01_dir, auto_dir, './data/auto8.4k_0510_resample1um_mergedBranches0712']
         ang_files = [h01_ang_file, auto_ang_file, 
                      './data/auto8.4k_0510_resample1um_mergedBranches0712_angles.pkl'
                     ]
-        datasets = ['H01-Skel', 'ACT-H8K', 'ACT-H8K\n(H01-guided)']
+        datasets = ['H01-Skel', 'ACT-H8K', 'ACT-H8K-O']
 
         # visualize the spatial distributions
         plot_spatial_angles(swc_dirs, ang_files, datasets)
