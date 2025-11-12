@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.mixture import GaussianMixture
+from ml.stats_utils import my_mannwhitneyu
 
 from swc_handler import parse_swc, write_swc
 from morph_topo.morphology import Morphology, Topology
@@ -150,6 +151,91 @@ def check_distribution(feat_file, dataset):
     figname = f'umap_of_branch_features_{dataset}.png'
     feat_names = ['radius', 'max_radius', 'ang_s1', 'ang_s2']
     features_on_umap(feat_file, feat_names, figname, scale=5)
+
+def compare_features(feat_file_auto, feat_file_h01):
+    # load the features for datasets
+    fauto = pd.read_csv(feat_file_auto, low_memory=False, index_col=0)
+    fh01 = pd.read_csv(feat_file_h01, low_memory=False, index_col=0)
+
+    sns.set_theme(style='ticks', font_scale=2.7)
+    # 合并数据
+    df1_copy = fauto[['radius', 'max_radius', 'ang_s1', 'ang_s2']].copy()
+    df2_copy = fh01[['radius', 'max_radius', 'ang_s1', 'ang_s2']].copy()
+
+    df1_copy['source'] = 'auto'
+    df2_copy['source'] = 'h01'
+
+    combined_df = pd.concat([df1_copy, df2_copy])
+
+    # 绘制小提琴图
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    axes = axes.ravel()
+
+    numeric_columns = ['radius', 'max_radius', 'ang_s1', 'ang_s2']
+
+    for i, col in enumerate(numeric_columns):
+        # 创建小提琴图 - 使用灰色边框，不填充
+        sns.violinplot(x='source', y=col, data=combined_df, ax=axes[i],
+                      palette=['magenta', 'blue'],  # 深灰和浅灰
+                      #color='slategray',
+                      hue='source',
+                      saturation=1, cut=0, fill=True, 
+                      alpha=0.25,
+                      linewidth=3, inner=None)  # 设置边框线宽，不显示内部图形
+
+        # 添加简化的箱线图 - 使用黑色，更简洁
+        sns.boxplot(x='source', y=col, data=combined_df, ax=axes[i],
+                   width=0.25, palette=['magenta', 'blue'],
+                   hue='source',
+                   boxprops=dict(alpha=1., linewidth=3),
+                   whiskerprops=dict(linewidth=3),
+                   capprops=dict(linewidth=3),
+                   medianprops=dict(linewidth=3),  # 中位数用红色突出
+                   fill=False, 
+                   showfliers=False)  # 不显示异常值
+
+        # 计算p-value
+        data1 = fauto[col].dropna()
+        data2 = fh01[col].dropna()
+
+        # 使用Mann-Whitney U检验（非参数检验，不假设正态分布）
+        stat, p_value, cles, significance = my_mannwhitneyu(data1, data2, size_correction=True)
+        # 打印详细的统计结果
+        print("=" * 80)
+        print(f"= Statistical Test Results (Mann-Whitney U Test) for {col}")
+        print(f"= -- p-value={p_value} and effect size={cles:.4f}, Significance={significance}")
+        print("=" * 80)
+        print('\n')
+
+        # 在图上添加p-value和显著性标识
+        y_max = max(data1.max(), data2.max())
+        y_min = min(data1.min(), data2.min())
+        y_range = y_max - y_min
+
+        # 添加显著性线和标识
+        axes[i].plot([0, 1], [y_max + 0.05 * y_range, y_max + 0.05 * y_range],
+                    color='black', linewidth=2)
+        axes[i].text(0.5, y_max + 0.06 * y_range,
+                    f'{significance}',
+                    ha='center', va='bottom')
+
+        # 调整y轴限制以容纳显著性标识
+        axes[i].set_ylim(y_min - 0.1 * y_range, y_max + 0.18 * y_range)
+
+        #axes[i].set_title(f'{col} Distribution (Violin Plot)')
+        axes[i].set_xlabel('')
+        #axes[i].set_ylabel('')
+
+        for spine in axes[i].spines.values():
+            spine.set_linewidth(3)
+        axes[i].tick_params(axis='both', which='major', width=3)
+
+    plt.tight_layout()
+    plt.savefig('comp_auto_h01_branch_features.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+    
 
 # 2. 基于BIC选择最佳n_components
 def select_best_components(data, max_components=60):
@@ -309,9 +395,12 @@ def pruning(df_auto, in_swc_dir, out_swc_dir):
     nprocessed = 0
     npruned = 0
     for swc_file in glob.glob(os.path.join(in_swc_dir, '*swc')):
-        nprocessed += 1
         swc_name = os.path.split(swc_file)[-1][:-4]
         out_swc_file = os.path.join(out_swc_dir, f'{swc_name}.swc')
+        
+        if os.path.exists(out_swc_file):
+            continue
+        nprocessed += 1
         
         cur_status = df_auto.loc[swc_name]
         if cur_status.gmm_label.sum() == 0:
@@ -441,8 +530,10 @@ if __name__ == '__main__':
         # prune
         #dataset = 'auto'
         #check_distribution(dataset_dict[dataset]['feat_file'], dataset=dataset)   # continuous distribution, GMM is preferred
+
+        compare_features(dataset_dict['auto']['feat_file'], dataset_dict['h01']['feat_file'])
         
         best_n = 17
-        anomaly_file = 'data/auto8.4k_0510_resample1um_mergedBranches0712_branch_features_anomaly.csv'
-        detect_outlier_stems(dataset_dict, anomaly_file, best_n=best_n)
+        #anomaly_file = 'data/auto8.4k_0510_resample1um_mergedBranches0712_branch_features_anomaly.csv'
+        #detect_outlier_stems(dataset_dict, anomaly_file, best_n=best_n)
         

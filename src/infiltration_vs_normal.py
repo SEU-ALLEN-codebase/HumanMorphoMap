@@ -66,8 +66,8 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         q1 = gfs_cur[feature].quantile(0.25)
         q3 = gfs_cur[feature].quantile(0.75)
         iqr = q3 - q1
-        y_min = q1 - ylim_scale * iqr
-        y_max = q3 + ylim_scale * iqr
+        y_min = max(0, q1 - ylim_scale * iqr)
+        y_max = q3 + ylim_scale * iqr #, gfs_cur[feature].max()
         y_limits[feature] = (y_min, y_max)
 
     # 设置图形（4 列子图）
@@ -491,6 +491,7 @@ def morphology_difference_between_infiltration_normal(
     gfs = gfs.rename(columns=column_mapping)
     gfs = gfs.loc[meta_n.cell_id]
 
+    # Tissue types from JSP, which is more consistently annotated
     meta_t = pd.read_csv(meta_file_tissue, index_col=0)
     meta_t.set_index('idx')
     ctypes = pd.read_csv(ctype_file, index_col=0)
@@ -535,10 +536,11 @@ def morphology_difference_between_infiltration_normal(
         '浸润': 'infiltration'
     })
 
-
+    ### Plotting
     if 1:
         # Morphological feature difference between normal and infiltrated pyr and non-pyr cells
         use_only_glioblastoma = False   # glioblastoma is also a subtype of glioma
+        strict_comp = True
         for ctype_id, ctype in ctype_dict.items():
             gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
             if (ctype == 'pyramidal') and use_only_glioblastoma:
@@ -546,9 +548,21 @@ def morphology_difference_between_infiltration_normal(
                 gfs_cur = gfs_cur[~gfs_cur.pt_code.isin(['P00064-T001', 'P00077-T001'])]
 
             print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
+
+            ############ sample-level statistics
+            sample_statis = gfs_cur.groupby('pt_code').agg({
+                'region': 'first',
+                'tissue_type': 'first',
+                'pt_code': 'count'
+            }).rename(columns={'pt_code': 'total_neurons'})
+            print(sample_statis)
+
+            if strict_comp:
+                gfs_cur = gfs_cur[gfs_cur.pt_code.isin(['P00065-T001', 'P00066-T001'])]
         
             ############ Overall statistic tests for each feature
-            _plot_separate_features(gfs_cur, ctype=ctype)
+            _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5)
+            continue
 
             ############ statistical test for neuronal subsets
             if ctype == 'pyramidal':
