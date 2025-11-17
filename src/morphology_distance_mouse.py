@@ -70,11 +70,21 @@ def _plot(dff, num=50, figname='temp', nsample=10000, max_dist=5):
     slope, intercept, r_value, p_value, std_err = linregress(bin_stats['bin_center'], bin_stats['median'])
     print(f'Slope: {slope:.4f}, p-value: {p_value:.4g}')
 
+    # For all cortical neurons
+    #mask1 = bin_stats['bin_center'] < 0.85
+    #print(linregress(bin_stats['bin_center'][mask1], bin_stats['median'][mask1]))
+    #mask2 = (bin_stats['bin_center'] >= 0.85) & (bin_stats['bin_center'] < 2.6)
+    #print(linregress(bin_stats['bin_center'][mask2], bin_stats['median'][mask2]))
+    
+    # for L5 neurons
+    mask1 = bin_stats['bin_center'] < 3.2
+    print(linregress(bin_stats['bin_center'][mask1], bin_stats['median'][mask1]))
+
     # 设置坐标轴范围
     plt.xlim(0, 5)
     # Adjust plot limits
     bin_centers = np.linspace(0, 5, num)[:-1] + (5/(num-1))/2
-    delta = 2.5
+    delta = 4
     ym = (bin_stats['median'].min() + bin_stats['median'].max())/2.
     plt.ylim(ym-delta/2, ym+delta/2)
 
@@ -136,6 +146,7 @@ def estimate_cortical_relations(feat_file, meta_file, py_file, region=None, laye
     edists = pdist(tmp_spos)
 
     dff = pd.DataFrame(np.array([edists, fdists]).transpose(), columns=('euclidean_distance', 'feature_distance'))
+    print(f'Shape of dataframe: {isoc.shape}')
     sns.set_theme(style='ticks', font_scale=2.2)
     _plot(dff, num=50, figname=figname)
     
@@ -148,6 +159,6 @@ if __name__ == '__main__':
     meta_file = './data/TableS6_Full_morphometry_1222.csv'
     py_file = './data/apical_1886_v20231211.txt'
     region = None #'SSp-bfd'
-    layer = 'L2/3'
+    layer = 'L5'
     estimate_cortical_relations(feat_file, meta_file, py_file, region=region, layer=layer, figname=f'euc_feat_mouse_{ntype}', subset=False)
 

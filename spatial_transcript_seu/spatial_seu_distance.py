@@ -283,10 +283,12 @@ def _plot(dff, num=50, figname='temp', nsample=10000, color='black', overall_dis
         bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
         bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
-        # 绘图：点图+误差条（使用实际数值坐标）
-        plt.errorbar(x=bin_stats['bin_center'],
-                     y=bin_stats['mean'],
-                     yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+        # 绘图：点图+误差条（使用实际数值坐标
+        show_mask = bin_stats['bin_center'] < xlim1
+        show_mask[0] = False    # to manually match to morphology. update 20251114
+        plt.errorbar(x=bin_stats['bin_center'][show_mask],
+                     y=bin_stats['mean'][show_mask],
+                     yerr=bin_stats['sem'][show_mask],  # 95% CI (改用sem则不需要*1.96)
                      fmt='o',
                      markersize=12,
                      color='black',
@@ -573,7 +575,7 @@ def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file,
         df_dists = pd.DataFrame(np.array([cdists, fdists]).transpose(),
                                 columns=('euclidean_distance', 'feature_distance'))
 
-        overall_distribution = True
+        overall_distribution = False
         figname = f'{sample_name}'
         _plot(df_dists, num=25, figname=figname, overall_distribution=overall_distribution)
 

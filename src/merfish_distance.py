@@ -130,7 +130,8 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
         #                alpha=0.3, edgecolor='none', rasterized=True, color='black')
         sns.displot(df, x=xn, y=yn, cmap='Reds',
                     #cbar=True,
-                    #cbar_kws={"label": "Count", 'aspect': 5})
+                    #cbar_kws={"label": "Count", 'aspect': 5}
+        )
         figname = figname + '_overall'
 
         plt.xlim(xlim0, xlim1)
@@ -149,9 +150,11 @@ def _plot(dff, num=50, zoom=False, figname='temp', nsample=10000, restrict_range
         bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
         # 绘图：点图+误差条（使用实际数值坐标）
-        plt.errorbar(x=bin_stats['bin_center'],
-                     y=bin_stats['mean'],
-                     yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+        show_mask = bin_stats['bin_center'] < xlim1
+        show_mask[0] = False    # to manually match to morphology. update 20251114
+        plt.errorbar(x=bin_stats['bin_center'][show_mask],
+                     y=bin_stats['mean'][show_mask],
+                     yerr=bin_stats['sem'][show_mask],  # 95% CI (改用sem则不需要*1.96)
                      fmt='o',
                      markersize=12,
                      color='black',

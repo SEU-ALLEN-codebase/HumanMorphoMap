@@ -124,9 +124,10 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
             # 绘图：点图+误差条（使用实际数值坐标）
-            plt.errorbar(x=bin_stats['bin_center'], 
-                         y=bin_stats['mean'],
-                         yerr=bin_stats['sem'],  # 95% CI (改用sem则不需要*1.96)
+            show_mask = bin_stats['bin_center'] < xlim1
+            plt.errorbar(x=bin_stats['bin_center'][show_mask], 
+                         y=bin_stats['mean'][show_mask],
+                         yerr=bin_stats['sem'][show_mask],  # 95% CI (改用sem则不需要*1.96)
                          fmt='o',
                          markersize=12,
                          color='black',
@@ -183,7 +184,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
 
     cell_type = 'pyramidal'
-    overall_distribution = True
+    overall_distribution = False
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
     elif cell_type == 'nonpyramidal':
