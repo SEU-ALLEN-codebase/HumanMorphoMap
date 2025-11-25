@@ -386,7 +386,15 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
         # 设置绘图风格
         plt.figure(figsize=(11, 6))
         sns.set_theme(style='ticks', font_scale=1.8)
-        palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K-O': '#2ca02c'}  # 自定义颜色
+        #palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K-O': '#2ca02c'}  # 自定义颜色
+        palette = {
+            'ACT-H8K': '#4C72B0',
+            'DeKock': '#8172B2',
+            'Allen': '#CCB974',
+            'H01-Skel': '#C44E52',
+            'ACT-H8K-O': '#55A868',
+            'ACT-H8K-O-MTG': '#64B5CD'
+        }
 
         # 创建绘图对象
         ax = plt.gca()

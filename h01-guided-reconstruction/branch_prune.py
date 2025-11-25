@@ -172,11 +172,15 @@ def compare_features(feat_file_auto, feat_file_h01):
     axes = axes.ravel()
 
     numeric_columns = ['radius', 'max_radius', 'ang_s1', 'ang_s2']
+    palette = {
+        'h01': '#C44E52',
+        'auto': '#55A868',
+    }
 
     for i, col in enumerate(numeric_columns):
         # 创建小提琴图 - 使用灰色边框，不填充
         sns.violinplot(x='source', y=col, data=combined_df, ax=axes[i],
-                      palette=['magenta', 'blue'],  # 深灰和浅灰
+                      palette=palette,
                       #color='slategray',
                       hue='source',
                       saturation=1, cut=0, fill=True, 
@@ -185,7 +189,7 @@ def compare_features(feat_file_auto, feat_file_h01):
 
         # 添加简化的箱线图 - 使用黑色，更简洁
         sns.boxplot(x='source', y=col, data=combined_df, ax=axes[i],
-                   width=0.25, palette=['magenta', 'blue'],
+                   width=0.25, palette=palette,
                    hue='source',
                    boxprops=dict(alpha=1., linewidth=3),
                    whiskerprops=dict(linewidth=3),

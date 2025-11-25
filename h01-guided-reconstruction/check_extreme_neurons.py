@@ -82,8 +82,6 @@ def check_extreme_neurons(gf_file, meta_file, update_file, fn, pn=0.95, display=
     top5_meta = meta.loc[top5_percent.index]
     top5_meta_new_ids = dfu.loc[top5_meta.index]
 
-    import ipdb; ipdb.set_trace()
-
     #low5_names = low5_percent.index.values
     low5_values = low5_percent[fn].values
     low5_meta = meta.loc[low5_percent.index]
@@ -152,8 +150,15 @@ def plot_stem_distributions(datasets, processed=False, use_h01_level1=True, meta
         figsize = (6,6)
     plt.figure(figsize=figsize)
 
-    sns.violinplot(df_stems, fill=False, cut=0)
-
+    palette = {
+        'ACT-H8K': '#4C72B0',
+        'DeKock': '#8172B2',
+        'Allen': '#CCB974',
+        'H01-Skel': '#C44E52',
+        'ACT-H8K-O': '#55A868',
+        'ACT-H8K-O-MTG': '#64B5CD'
+    }
+    ax_violin = sns.violinplot(df_stems, palette=palette, fill=False, cut=0)
 
     # perform statistical test
     for i in range(1, df_stems.shape[1]):
@@ -183,7 +188,7 @@ def plot_stem_distributions(datasets, processed=False, use_h01_level1=True, meta
         figname = f'stem_distributions_comp_processed.png'
     else:
         figname = f'stem_distributions_comp.png'
-    plt.savefig(figname, dpi=300); plt.close()
+    plt.savefig(figname, dpi=600); plt.close()
     
     #import ipdb;ipdb.set_trace()
     print()
