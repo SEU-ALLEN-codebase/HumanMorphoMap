@@ -106,7 +106,7 @@ def calc_features(in_swc_dir, out_feat_file):
     return df
 
 ###### Analyze
-def levelwise_mining(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
+def levelwise_lobes(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
     # Parsing the data
     feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
     meta = pd.read_csv(meta_file, index_col=2, low_memory=False, encoding='gbk')
@@ -119,7 +119,9 @@ def levelwise_mining(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
     ctypes.index = [int(ctype[:5]) for ctype in ctypes.index]
     # ihc
     ihc_mask = feats.immunohistochemistry == ihc
-    ctype_mask = ctypes.loc[feats.index, 'CLS2'] == str(ctype)
+    #ctype_mask = ctypes.loc[feats.index, 'CLS2'] == str(ctype)
+    ctype_mask = (ctypes.loc[feats.index, 'CLS2'] == str(ctype)) & \
+                 (ctypes.loc[feats.index, 'num_annotator'] >= 2)
 
     feats = feats[ihc_mask & ctype_mask]
 
@@ -127,25 +129,83 @@ def levelwise_mining(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
     import sys
     sys.path.append('../src')
     from config import REG2LOBE
+    from plotters.customized_plotters import sns_jointplot
     
     feats['lobe'] = feats.brain_region.map(REG2LOBE)
     
-
-    import ipdb; ipdb.set_trace()
-    for level in range(5):
+    for level in range(10):
         feats_l = feats[feats.level == level].drop(columns='level')
+        if len(feats_l) < 10:
+            continue
         
+        figname = f'lobe_level{level}.png'
+        sns_jointplot(feats_l[~feats_l.gender.isna()], x='order_count', 
+                      y='branch_length', xlim=None, ylim=None, hue='lobe', 
+                      out_fig=figname, markersize=8)
+
+
+def levelwise_infiltration(feat_file, meta_file, meta_JSP, cell_type_file, ihc=0, ctype=0):
+    # Parsing the data
+    feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
+    meta = pd.read_csv(meta_file, index_col=2, low_memory=False, encoding='gbk')
+    meta['pt_code'] = ['-'.join(ptrsb.split('-')[:2]) for ptrsb in meta.PTRSB]
+    # tissue type 
+    meta_t = pd.read_csv(meta_file_tissue_JSP, index_col=0)
+    meta_t['pt_code'] = meta_t['patient_number'] + '-' + meta_t['tissue_id']
+    meta_t = meta_t.set_index('pt_code')
+
+    meta_cols = ['brain_region', 'age', 'gender', 'immunohistochemistry', 'pt_code']
+    feats[meta_cols] = meta.loc[feats.index][meta_cols]
+
+    # get the cell types and ihc status
+    ctypes = pd.read_csv(ctype_file, index_col=0, low_memory=False)
+    ctypes.index = [int(ctype[:5]) for ctype in ctypes.index]
+    # ihc
+    ihc_mask = feats.immunohistochemistry == ihc
+    #ctype_mask = ctypes.loc[feats.index, 'CLS2'] == str(ctype)
+    ctype_mask = (ctypes.loc[feats.index, 'CLS2'] == str(ctype)) & \
+                 (ctypes.loc[feats.index, 'num_annotator'] >= 2)
+    # in tissue
+    tissue_mask = feats.pt_code.isin(meta_t.index)
+
+    feats = feats[ihc_mask & ctype_mask & tissue_mask]
+    feats['tissue_type'] = meta_t.loc[feats['pt_code'], 'tissue_type'].replace({
+        '正常': 'normal',
+        '浸润': 'infiltration'
+    }).values
+
+    # 
+    import sys
+    sys.path.append('../src')
+    from config import REG2LOBE
+    from plotters.customized_plotters import sns_jointplot
+    
+    feats['lobe'] = feats.brain_region.map(REG2LOBE)
+    
+    for level in range(10):
+        feats_l = feats[feats.level == level].drop(columns='level')
+        if len(feats_l) < 10:
+            continue
+        
+        figname = f'infiltrationVSnormal_level{level}.png'
+        sns_jointplot(feats_l[~feats_l.gender.isna()], x='order_count', 
+                      y='branch_length', xlim=None, ylim=None, hue='tissue_type', 
+                      out_fig=figname, markersize=8)
+
+
         
     
 if __name__ == '__main__':
-    in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
-    out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_levelwise_features.csv'
+    in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
+    out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100_levelwise_features.csv'
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
     ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
-    ihc = 0
+    meta_file_tissue_JSP = '../meta/meta_samples_JSP_0330.xlsx.csv'
     ctype = 0   # 0: pyramidal; 1: nonpyramidal
 
     #calc_features(in_swc_dir, out_feat_file)
 
-    levelwise_mining(out_feat_file, meta_file, ctype_file, ihc=ihc)
+    #levelwise_lobes(out_feat_file, meta_file, ctype_file, ihc=0)
+
+    levelwise_infiltration(out_feat_file, meta_file, meta_file_tissue_JSP, ctype_file, ihc=1)
 

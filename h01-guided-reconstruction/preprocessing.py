@@ -57,8 +57,8 @@ if __name__ == '__main__':
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/H01_resample1um_prune25um'
         #outfile = 'gf_H01_resample1um_prune25um.csv'
     
-        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_branchPruned1029'
-        outfile = 'auto8.4k_0510_resample1um_mergedBranches0712_branchPruned.csv'
+        swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
+        outfile = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100.csv'
 
         #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/manual_resampled1um'
         #outfile = 'manual_resampled1um.csv'
@@ -70,6 +70,41 @@ if __name__ == '__main__':
 
         nprocessors = 16
         calc_global_features_from_folder(swc_dir, outfile, nprocessors=nprocessors, timeout=360)
+        #reindexing
+        df = pd.read_csv(outfile, index_col=0)
+        indices = [int(idx.split('_')[0]) for idx in df.index]
+        df.index = indices
+        df = df.sort_index()
+        df.to_csv(outfile, index=True)
+
+        # renaming
+        dfr = df.copy()
+        df.index.name = 'ID'
+        dfr.columns = [
+             'N_node',
+             'Soma_surface',
+             'N_stem',
+             'Number of Bifurcations',
+             'Number of Branches',
+             'Number of Tips',
+             'Overall Width',
+             'Overall Height',
+             'Overall Depth',
+             'Average Diameter',
+             'Total Length',
+             'Total Surface',
+             'Total Volume',
+             'Max Euclidean Distance',
+             'Max Path Distance',
+             'Max Branch Order',
+             'Average Contraction',
+             'Average Fragmentation',
+             'Average Parent-daughter Ratio',
+             'Average Bifurcation Angle Local',
+             'Average Bifurcation Angle Remote',
+             'Hausdorff Dimension'
+        ]
+        dfr.to_csv(f'{outfile[:-4]}_renamed.csv', index=True)
 
     if 0:
         compare_features()

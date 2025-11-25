@@ -421,7 +421,8 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
             bbox_to_anchor=(1.05, 1),  # 将图例移到图像右侧外面
             borderaxespad=0.           # 图例与图像的间距
         )
-        ax.set_xlim(0, 50)
+        ax.set_xlim(0, 35)
+        ax.set_ylim(0, 0.007)
 
         # 设置图例外框样式
         frame = legend.get_frame()
