@@ -540,12 +540,20 @@ def morphology_difference_between_infiltration_normal(
     if 1:
         # Morphological feature difference between normal and infiltrated pyr and non-pyr cells
         use_only_glioblastoma = False   # glioblastoma is also a subtype of glioma
-        strict_comp = True
+        strict_comp = False
+        use_only_one_tissue = False
+        tissue_pt = 'P00061-T001'
+
         for ctype_id, ctype in ctype_dict.items():
             gfs_cur = gfs_c[gfs_c['cell_type'] == ctype]
             if (ctype == 'pyramidal') and use_only_glioblastoma:
                 # 'P00064-T001', 'P00077-T001' are glioma
                 gfs_cur = gfs_cur[~gfs_cur.pt_code.isin(['P00064-T001', 'P00077-T001'])]
+
+            if (ctype == 'pyramidal') and use_only_one_tissue:
+                mask_normal = (gfs_cur.tissue_type == 'normal') & (gfs_cur.pt_code == tissue_pt)
+                mask_infil = gfs_cur.tissue_type == 'infiltration'
+                gfs_cur = gfs_cur[mask_normal | mask_infil]
 
             print(f'Number of {ctype} cells: {gfs_cur.shape[0]}')
 
@@ -561,8 +569,9 @@ def morphology_difference_between_infiltration_normal(
                 gfs_cur = gfs_cur[gfs_cur.pt_code.isin(['P00065-T001', 'P00066-T001'])]
         
             ############ Overall statistic tests for each feature
-            _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5)
-            continue
+            _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5) # scale=3 for P41, otherwise 2.5
+
+            continue    # skip statistical
 
             ############ statistical test for neuronal subsets
             if ctype == 'pyramidal':

@@ -183,7 +183,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'pyramidal'
+    cell_type = 'nonpyramidal'
     overall_distribution = False
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'

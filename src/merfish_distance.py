@@ -337,6 +337,7 @@ def merfish_vs_distance(merfish_file, gene_file, feat_file, region, layer=None):
         show_ctypes = ['eL2/3.IT', 'eL4/5.IT', 'eL5.IT', 'eL6.IT', 'eL6.CT', 'eL6.CAR3', 'eL6.b']
         restrict_range = False
 
+
     for ctype in show_ctypes:
         ct_mask = ctypes == ctype
         tname = ctype.replace("/", "").replace(".", "")
@@ -405,7 +406,23 @@ def split_by_pc2_quantiles(xy_cur, fpca_cur, pc, pc_id, center, quantiles=[0.25,
 
     return groups
 
-def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
+def find_outliner(xys):
+    from sklearn.cluster import DBSCAN
+
+    # 将数据标准化，使X和Y坐标在算法中具有同等重要性
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    coords_scaled = scaler.fit_transform(xys[['adjusted.x', 'adjusted.y']])
+
+    # 使用DBSCAN聚类
+    # eps: 邻域半径，min_samples: 形成核心点所需的最小邻域样本数
+    dbscan = DBSCAN(eps=0.5, min_samples=10)
+    clusters = dbscan.fit_predict(coords_scaled)
+    xys['cluster'] = clusters
+
+    return clusters
+
+def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region, inh_type=False):
 
     ##################### Helper functions #######################
     def get_subpairs(xy_cur_i, fpca_cur_i, pci, dist_th):
@@ -453,6 +470,7 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     ################## End of helper functions ###################    
 
 
+    sns.set_theme(style='ticks', font_scale=2.2)
     df_g = pd.read_csv(gene_file)
     df_f = pd.read_csv(feat_file)
     
@@ -471,13 +489,13 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
     xy = df_f.loc[df_pca.index, ['adjusted.x', 'adjusted.y']]
 
     ctypes = df_f.loc[df_pca.index, 'cluster_L2']
-    ctype = 'eL2/3.IT'
-    pc_id = 1
+    ctype = 'iVIP'  # 
+    anchor_type = 'eL2/3.IT'
+    pc_id = 0
     dist_th = 0.3
 
-
     restrict_range = False
-    pc1, pc2, center = estimate_principal_axes(df_f, cell_name='eL2/3.IT')
+    pc1, pc2, center = estimate_principal_axes(df_f, cell_name=anchor_type)
 
     if pc_id == 0:
         pci, pcj = pc1, pc2
@@ -485,14 +503,58 @@ def merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region):
         pci, pcj = pc2, pc1
     else:
         raise ValueError('Incorrect `pc_id` value!')
-        
-    sns.set_theme(style='ticks', font_scale=2.2)
+
+    # target neurons
     ct_mask = ctypes == ctype
     tname = ctype.replace("/", "").replace(".", "")
     figname = f'{tname}_merfish_{region}'
     xy_cur = xy[ct_mask]
     fpca_cur = fpca[ct_mask]
     
+    # get neurons in target regions
+    anchor_mask = ctypes == anchor_type
+    if inh_type:
+        assert anchor_type == 'eL2/3.IT', "use eL2/3.IT as reference"
+        assert anchor_type != ctype
+        # plot the cells 
+        xy_anchor = xy[anchor_mask]
+        find_outliner(xy_anchor)
+        ax_it23 = sns.scatterplot(data=xy_anchor, x='adjusted.x', y='adjusted.y', 
+                                  hue='cluster', alpha=0.8, legend=False,
+                                  palette={0:'black', -1:'red'})
+        plt.savefig('eL23IT_outliners.png', dpi=600); plt.close()
+
+        # get the target inhibitory neurons, based on the location of eL23IT neurons
+        from scipy.spatial import KDTree
+        
+        # 提取坐标数据
+        cur_points = xy_cur[['adjusted.x', 'adjusted.y']].values
+        anchor_points = xy_anchor[['adjusted.x', 'adjusted.y']].values
+
+        # 构建KDTree（基于锚点）
+        anchor_tree = KDTree(anchor_points)
+
+        # 查询：找到cur_points中每个点周围200单位内的所有锚点
+        # 返回结果是一个稀疏距离矩阵的列表
+        indices_list = anchor_tree.query_ball_point(cur_points, r=300.0)
+
+        # 找出在指定距离内有至少一个锚点的cur_points索引
+        valid_mask = np.ones(len(cur_points)).astype(bool)
+        for i, indices in enumerate(indices_list):
+            if len(indices) == 0:
+                valid_mask[i] = False
+
+        # plot the distribtions
+        xy_cur['in_L23'] = valid_mask
+        ax_cur = sns.scatterplot(data=xy_cur, x='adjusted.x', y='adjusted.y', 
+                                 hue='in_L23', alpha=0.8, legend=False,
+                                 palette={True:'purple', False:'orange'})
+        plt.savefig(f'{tname}_outliners_basedon_eL23IT.png', dpi=600); plt.close()
+
+        xy_cur = xy_cur[valid_mask][['adjusted.x', 'adjusted.y']]
+        fpca_cur = fpca_cur[valid_mask]
+
+
     # get sublayers by percentiles
     groups = split_by_pc2_quantiles(xy_cur, fpca_cur, pci, pc_id, center, cell_name=ctype)
     # 检查每组点数
@@ -526,7 +588,11 @@ if __name__ == '__main__':
 
     layer = False
     merfish_vs_distance(merfish_file, gene_file, feat_file, region=region, layer=layer) 
-    #merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region)
+
+    if 0:
+        # For in-layer transition along different axes
+        inh_type = True # calculate the distribution of iVIP in L2/3
+        merfish_vs_distance_sublayers(merfish_file, gene_file, feat_file, region, inh_type=inh_type)
 
     if 0:
         atlas_file = '../resources/mni_icbm152_CerebrA_tal_nlin_sym_09c_u8.nii'
