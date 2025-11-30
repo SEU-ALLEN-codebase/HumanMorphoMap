@@ -15,6 +15,7 @@ from matplotlib.gridspec import GridSpec
 import SimpleITK as sitk
 from scipy.ndimage import center_of_mass
 from scipy.spatial.distance import cdist
+import scipy.stats as stats
 from scipy.stats import linregress, mannwhitneyu
 
 from config import to_PID5, to_TID3
@@ -450,7 +451,42 @@ def plot_nonpyr_ratios(gfs_c):
     plt.close()
 
 
+def compare_variance_components(gfs_cur):
+    from scipy.spatial.distance import jensenshannon
 
+    # 为每个特征分别进行分析
+    features = ['Soma_surface', 'Average Diameter', 'Total Length']
+    results = {}
+
+    for feature in features:
+        print(f"\n=== 分析特征: {feature} ===")
+        
+        # 提取数据
+        normal_data = gfs_cur[gfs_cur['tissue_type'] == 'normal'][feature].dropna()
+        infiltr_data = gfs_cur[gfs_cur['tissue_type'] == 'infiltration'][feature].dropna()
+        
+        # 1. 计算组内方差（衡量各组内部的变异程度）
+        var_normal = np.var(normal_data, ddof=1)  # 无偏估计
+        var_infiltr = np.var(infiltr_data, ddof=1)
+        within_group_var = (var_normal + var_infiltr) / 2  # 平均组内方差
+        
+        print(f"正常组织方差: {var_normal:.2f}")
+        print(f"浸润组织方差: {var_infiltr:.2f}")
+        print(f"平均组内方差: {within_group_var:.2f}")
+        
+        # 2. 计算组间差异（效应量）
+        #cohens_d = (np.mean(normal_data) - np.mean(infiltr_data)) / np.sqrt(within_group_var)
+        #print(f"Cohen's d (效应量): {cohens_d:.3f}")
+        
+        # 3. 方差比：组间差异 vs 组内差异
+        # F统计量本身就包含这个比值的思想
+        f_stat, p_value = stats.f_oneway(normal_data, infiltr_data)
+        between_group_var = f_stat * within_group_var  # 估算组间方差
+        
+        variance_ratio = between_group_var / within_group_var
+        print(f"方差比 (组间/组内): {variance_ratio:.3f}")
+        print(f"ANOVA p-value: {p_value:.2e}")
+        
 
 def morphology_difference_between_infiltration_normal(
         meta_file_neuron, meta_file_tissue, gf_file, ctype_file, ihc=0
@@ -567,6 +603,12 @@ def morphology_difference_between_infiltration_normal(
 
             if strict_comp:
                 gfs_cur = gfs_cur[gfs_cur.pt_code.isin(['P00065-T001', 'P00066-T001'])]
+
+            ##### do variance estimation #######
+            #import ipdb; ipdb.set_trace()
+            compare_variance_components(gfs_cur)
+            continue
+
         
             ############ Overall statistic tests for each feature
             _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5) # scale=3 for P41, otherwise 2.5
@@ -586,7 +628,6 @@ def morphology_difference_between_infiltration_normal(
                     pt_code = pt_n[iptn]
                     pt_count = pt_c[iptn]
                     gfs_subset = gfs_cur[gfs_cur.pt_code.isin(infil_tissues + [pt_code])].copy()
-                    gfs_subset
 
                     _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
 
