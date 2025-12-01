@@ -11,13 +11,17 @@ from skimage import measure, morphology
 import tifffile
 from skimage.transform import resize
 import os
+import glob
 import pandas as pd
+import cc3d
 from scipy.optimize import curve_fit
 
 from scipy import linalg
 from scipy.optimize import least_squares
 from scipy.optimize import minimize
 from scipy.spatial import ConvexHull, HalfspaceIntersection
+
+from file_io import save_image
 
 
 def fit_bounding_ellipsoid(points):
@@ -129,18 +133,46 @@ def calculate_foreground_ratio_in_ellipsoid(seg_mask, center, radii, rotation):
     return fg_el_ratio, ellipsoid_volume, foreground_count, fg_crop_ratio
 
 
-def fit_soma(seg_file, df_meta):
+def get_the_largest_mask(seg):
+    # 使用 cc3d 进行连通区域标记
+    # connectivity=26 表示使用 26 邻域（包括对角）
+    labels_out, N = cc3d.connected_components(seg, connectivity=26, return_N=True)
+    
+    if N > 1:
+        print(f'Found {N} connected components. Keeping only the largest one.')
+        
+        # 统计每个连通区域的大小
+        component_sizes = []
+        for label_id in range(1, N + 1):
+            component_mask = (labels_out == label_id)
+            component_size = np.sum(component_mask)
+            component_sizes.append((label_id, component_size))
+        
+        # 按大小排序，找到最大的区域
+        component_sizes.sort(key=lambda x: x[1], reverse=True)
+        largest_label_id, largest_size = component_sizes[0]
+        
+        print(f'Largest component: label {largest_label_id}, size = {largest_size} voxels')
+        
+        # 仅保留最大的连通区域
+        seg = (labels_out == largest_label_id).astype(np.uint8)
+        return seg
+    else:
+        return seg
+
+
+def fit_soma(seg_file, out_dir, df_meta):
     # get filename and cell id
     filename = os.path.split(seg_file)[-1]
     cell_id = int(filename.split('_')[0])
 
     # get the resolution
     try:
-        xy_rez = df_meta.loc[cell_id]['xy_resolution'] / 1000.0 # to um
+        z_rez, xy_rez = df_meta.loc[cell_id][['z_resolution', 'xy_resolution']] / 1000.0 # to um
     except KeyError:
         return 
 
-    resolution = (1, xy_rez, xy_rez)
+    resolution = (z_rez, xy_rez, xy_rez)
 
     print(f'Loading image: {filename}')
     seg = tifffile.imread(seg_file).astype(np.uint8)
@@ -148,6 +180,13 @@ def fit_soma(seg_file, df_meta):
     print(f'do a pre-crop for acceleration, using a relative small kernel')
     pre_kernel = morphology.ball(3)
     pre_seg = morphology.opening(seg, pre_kernel)
+    # check if multiple connected components, if yes, keep only the components whose size is larger
+    # 检查是否存在多个连通区域，如果有，仅保留最大的一个
+    if np.sum(pre_seg) > 0:
+        pre_seg = get_the_largest_mask(pre_seg)
+    else:
+        return 
+
 
     # 1. 找到opening后mask在三个维度的非零坐标范围
     nonzero_coords = np.where(pre_seg > 0)
@@ -188,7 +227,8 @@ def fit_soma(seg_file, df_meta):
     print(f'Resizing to homogenous image in cropped space')
     crop_z, crop_y, crop_x = cropped_seg.shape
     seg_crop = seg[z_min_exp:z_max_exp, y_min_exp:y_max_exp, x_min_exp:x_max_exp]
-    seg_c_r = resize(seg_crop, (crop_z/resolution[0], crop_y/resolution[1], crop_x/resolution[2]), order=0)
+    scale_z = resolution[0] / resolution[1]
+    seg_c_r = resize(seg_crop, (int(round(crop_z*scale_z)), crop_y, crop_x), order=0)
     seg_c_r = (seg_c_r - seg_c_r.min()) / (seg_c_r.max() - seg_c_r.min())
     seg_c_r = np.where(seg_c_r > 0, 1, 0).astype(np.uint8)
     # 填补空洞
@@ -220,6 +260,9 @@ def fit_soma(seg_file, df_meta):
         if len(foreground_coords[0]) < 10:  # 需要足够的点来拟合椭球
             print(f"Radius {radius}: Too few points ({len(foreground_coords[0])}) for ellipsoid fitting.")
             continue
+
+        # double check the foreground information
+        opened_img = get_the_largest_mask(opened_img)
         
         # 将坐标转换为数组形式 (N, 3)
         points = np.column_stack(foreground_coords)
@@ -229,7 +272,7 @@ def fit_soma(seg_file, df_meta):
             # 拟合椭球
             center, radii, rotation = fit_bounding_ellipsoid(points)
             print(center, radii, rotation)
-            fg_el_ratio, ellipsoid_volume, foreground_count, fg_crop_ratio = calculate_foreground_ratio_in_ellipsoid(seg_c_r, center, radii, rotation)
+            fg_el_ratio, ellipsoid_volume, foreground_count, fg_crop_ratio = calculate_foreground_ratio_in_ellipsoid(opened_img, center, radii, rotation)
             
             print(f"Radius {radius}: foreground ratio of ellipsoid = {fg_el_ratio:.3f} "
                   f"\n    foreground ratio in cropped_image = {fg_crop_ratio:.3f} "
@@ -242,8 +285,9 @@ def fit_soma(seg_file, df_meta):
             fg_ratios.append(fg_el_ratio)
             
             # 判断终止条件
-            if fg_el_ratio > 0.6:
-                print(f"Radius {radius}: Termination condition met (ratio = {fg_el_ratio:.3f} > 0.5)")
+            ratio_thresh = 0.65
+            if fg_el_ratio > ratio_thresh:
+                print(f"Radius {radius}: Termination condition met (ratio = {fg_el_ratio:.3f} > ratio_thresh)")
                 break
                 
         except Exception as e:
@@ -263,15 +307,15 @@ def fit_soma(seg_file, df_meta):
     kernel_radii = kernel_radii[:len(fg_ratios)]
     print(f'kernel_radii and fg_ratio: {kernel_radii}, {fg_ratios}')
 
-    color = 'tab:blue'
-    ax1.set_ylabel('Forground ratio', color=color)
-    ax1.plot(kernel_radii, fg_ratios, marker='s', color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
+    #color = 'tab:blue'
+    #ax1.set_ylabel('Forground ratio', color=color)
+    #ax1.plot(kernel_radii, fg_ratios, marker='s', color=color)
+    #ax1.tick_params(axis='y', labelcolor=color)
     # plot line y
 
-    fig.tight_layout()
-    plt.savefig(filename.replace('.tif', '_ellipse_fg_ratio.png'))
-    plt.close()
+    #fig.tight_layout()
+    #plt.savefig(os.path.join(out_dir, filename.replace('.tif', '_ellipse_fg_ratio.png')))
+    #plt.close()
 
     print(f'Get the final results, using best_radius: {final_radius}')
     # high_freq_averages_fit的最低点
@@ -286,12 +330,15 @@ def fit_soma(seg_file, df_meta):
         cropped_seg.max(axis=0),
         cropped_seg.max(axis=1),
         cropped_seg.max(axis=2),
+        result_open_img.max(axis=0),
+        result_open_img.max(axis=1),
+        result_open_img.max(axis=2),
         result_img.max(axis=0),
         result_img.max(axis=1),
         result_img.max(axis=2)
     ]
 
-    fig, axes = plt.subplots(2, 3, figsize=(12, 12))
+    fig, axes = plt.subplots(3, 3, figsize=(12, 12))
     for i, ax in enumerate(axes.flat):
         ax.imshow(mip_list[i], cmap='gray')
         # if(i < 3):
@@ -303,24 +350,92 @@ def fit_soma(seg_file, df_meta):
         ax.axis('off')
     plt.tight_layout()
     # plt.show()
-    plt.savefig(filename.replace('.tif', '_MIP.png'))
+    plt.savefig(os.path.join(out_dir, 'mip', filename.replace('.tif', '_MIP.png')))
     plt.close()
 
+    # save the final image
+    save_image(os.path.join(out_dir, 'mask', filename), result_img*255)
+    # also save the resized image
+    result_open_img = np.where(result_open_img > 0, 1, 0).astype(np.uint8)
+    save_image(os.path.join(out_dir, 'mask_isotropy', filename), result_open_img*255)
 
+    return center, radii, rotation, fg_el_ratio, z_min_exp, z_max_exp, y_min_exp, y_max_exp, x_min_exp, x_max_exp, z_rez, xy_rez
+
+def fit_all(seg_dir, out_dir, df_meta, out_file):
+    soma_infos = []
+    for ifile, seg_file in enumerate(glob.glob(os.path.join(seg_dir, '*.tif'))):
+        result = fit_soma(seg_file, out_dir, df_meta)
+        if result is not None:
+            filename = os.path.split(seg_file)[-1]
+            cell_id = int(filename.split('_')[0])
+            soma_infos.append([cell_id, filename, *result])
+        
+        if ifile % 30 == 0:
+            print(f'\n====> Processing: {ifile}')
+            #if ifile > 0: break
+    
+    # to dataframe
+    column_names = [
+        'cell_id', 
+        'filename',
+        'center',      # 元组或数组: (z, y, x)
+        'radii',       # 元组或数组: (r_z, r_y, r_x)  
+        'rotation',    # 3x3数组或展平的9个值
+        'fg_el_ratio', # 前景体素在椭球中的比例
+        'z_min_exp',   # 扩展后的Z轴最小值
+        'z_max_exp',   # 扩展后的Z轴最大值
+        'y_min_exp',   # 扩展后的Y轴最小值
+        'y_max_exp',   # 扩展后的Y轴最大值
+        'x_min_exp',   # 扩展后的X轴最小值
+        'x_max_exp',   # 扩展后的X轴最大值
+        'z_rez', 
+        'xy_rez'
+    ]
+
+    # 创建DataFrame
+    df_soma_info = pd.DataFrame(soma_infos, columns=column_names)
+
+    # 将center展开为三列
+    df_soma_info[['center_z', 'center_y', 'center_x']] = pd.DataFrame(
+        df_soma_info['center'].tolist(), index=df_soma_info.index
+    )
+
+    # 将radii展开为三列
+    df_soma_info[['radius_z', 'radius_y', 'radius_x']] = pd.DataFrame(
+        df_soma_info['radii'].tolist(), index=df_soma_info.index
+    )
+
+    # 将3x3旋转矩阵展平为9个值
+    df_soma_info['rotation_flat'] = df_soma_info['rotation'].apply(lambda x: x.flatten())
+    # 然后可以展开为9列
+    rotation_cols = [f'rot_{i}' for i in range(9)]
+    df_soma_info[rotation_cols] = pd.DataFrame(
+        df_soma_info['rotation_flat'].tolist(), index=df_soma_info.index
+    )
+
+    # 可选：删除原始列
+    df_soma_info.drop(['center', 'radii', 'rotation'], axis=1, inplace=True)
+
+
+    # 设置cell_id为索引
+    df_soma_info.set_index('cell_id', inplace=True)
+    df_soma_info.to_csv(out_file, index=True)
+
+    return df_soma_info
+            
 
 if __name__ == "__main__":
-    import glob
 
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
     seg_dir = '/data/kfchen/trace_ws/paper_trace_result/nnunet/proposed_9k/0_seg'
+    out_dir = '/data2/lyf/data/human10k_tmp/data/0_seg_soma-lyf'
+    out_file = 'fitted_soma_info.csv'
+    
     #seg_file = f'{seg_dir}/02764_P025_T01_-S032_LTL_R0613_RJ-20230201_RJ.tif'
 
     df_meta = pd.read_csv(meta_file, index_col='cell_id', low_memory=False, encoding='gbk')
+    fit_all(seg_dir, out_dir, df_meta, out_file)
     
-    for ifile, seg_file in enumerate(glob.glob(os.path.join(seg_dir, '*.tif'))):
-        if ifile >= 10:
-            break
-        fit_soma(seg_file, df_meta)
         
     
 
