@@ -48,15 +48,15 @@ def extract_features_to_dataframe(dict_s: Dict[int, Dict[str, Any]]) -> pd.DataF
     
     # 特征定义
     feature_definitions = [
-        ('soma_volume', ['soma_volume', 'volume_voxel_based']),
-        ('max_min_radius_ratio', ['soma_anisotropy', 'max_min_ratio']),
-        ('anisotropy_index', ['soma_anisotropy', 'anisotropy_index']),
-        ('fg_el_ratio', 'fg_el_ratio'),
-        ('smoothness_score', ['soma_smoothness', 'smoothness_score']),
-        ('roughness_index', ['soma_smoothness', 'roughness_index']),
-        ('surface_complexity', ['soma_smoothness', 'surface_complexity']),
-        ('curvature_variance', ['soma_smoothness', 'curvature_variance']),
-        ('soma_sphericity', 'soma_sphericity')
+        ('Volume', ['soma_volume', 'volume_voxel_based']),
+        #('max_min_radius_ratio', ['soma_anisotropy', 'max_min_ratio']),
+        ('Anisotropy', ['soma_anisotropy', 'anisotropy_index']),
+        #('fg_el_ratio', 'fg_el_ratio'),
+        ('Smoothness', ['soma_smoothness', 'smoothness_score']),
+        ('Roughness', ['soma_smoothness', 'roughness_index']),
+        ('Surface   \nComplexity', ['soma_smoothness', 'surface_complexity']),
+        ('Curvature\nVariance ', ['soma_smoothness', 'curvature_variance']),
+        ('Sphericity', 'soma_sphericity')
     ]
     
     # 收集数据
@@ -299,11 +299,12 @@ class CellTypeTissueComparison:
         n_cell_types = len(self.df[self.cell_type_col].unique())
         
         # 创建大图
-        fig = plt.figure(figsize=(20, 5 * n_cell_types))
+        fig = plt.figure(figsize=(14, 5 * n_cell_types))
         
-        gs = fig.add_gridspec(n_cell_types, 3, hspace=0.3, wspace=0.3)
+        gs = fig.add_gridspec(n_cell_types, 2, hspace=0.3, wspace=0.4,
+                              width_ratios=[0.6, 0.4])
         
-        for idx, cell_type in enumerate(sorted(self.df[self.cell_type_col].unique())):
+        for idx, cell_type in enumerate(sorted(self.df[self.cell_type_col].unique(), reverse=True)):
             cell_type_data = self.df[self.df[self.cell_type_col] == cell_type]
             
             if len(cell_type_data) < 10:
@@ -313,16 +314,12 @@ class CellTypeTissueComparison:
             ax1 = fig.add_subplot(gs[idx, 0])
             self._plot_violin_boxplot(ax1, cell_type_data, cell_type)
             
-            # 2. 点图+误差棒
-            #ax2 = fig.add_subplot(gs[idx, 1])
-            #self._plot_point_plot(ax2, cell_type_data, cell_type)
-            
             # 3. 特征差异热图
-            ax3 = fig.add_subplot(gs[idx, 1])
-            self._plot_feature_heatmap(ax3, cell_type_data, cell_type)
+            #ax3 = fig.add_subplot(gs[idx, 1])
+            #self._plot_feature_heatmap(ax3, cell_type_data, cell_type)
             
             # 4. 效应量条形图
-            ax4 = fig.add_subplot(gs[idx, 2])
+            ax4 = fig.add_subplot(gs[idx, 1])
             self._plot_effect_size_bar(ax4, cell_type, idx)
         
         #plt.suptitle('Cell Type Feature Comparison: Normal vs Infiltration', 
@@ -351,70 +348,28 @@ class CellTypeTissueComparison:
                 )
         
         sns.violinplot(x='Feature', y='Value', hue=self.tissue_col,
-                       data=melted_data, ax=ax, split=True, inner='box')
+                       data=melted_data, ax=ax, split=True, inner='box',
+                       palette={'normal': 'lightcoral', 'infiltration': 'gold'},
+                       )
+        # 然后去掉所有violin的轮廓线
+        for path in ax.collections:
+            # 设置轮廓线宽度为0
+            path.set_linewidth(0)
+            # 或者设置边缘颜色为透明
+            path.set_edgecolor('none')
+
         
         ax.set_title(f'{cell_type}: Feature Distribution')
         ax.set_ylabel('Standardized Value')
-        ax.tick_params(axis='x', rotation=45, ha='right')
-        ax.legend(title='Tissue Type')
+        if cell_type == 'pyramidal':
+            ax.set_xlabel('')
+            ax.set_xticks([])
+        else:
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        
+        ax.legend(title='', ncols=2, loc='upper center')
     
-    def _plot_point_plot(self, ax, data, cell_type):
-        """绘制点图+误差棒"""
-        plot_data = []
-        
-        for feature in self.feature_cols:
-            for tissue in ['normal', 'infiltration']:
-                tissue_data = data[data[self.tissue_col] == tissue][feature].dropna()
-                
-                if len(tissue_data) > 0:
-                    mean_val = tissue_data.mean()
-                    sem_val = tissue_data.sem() if len(tissue_data) > 1 else 0
-                    
-                    plot_data.append({
-                        'Feature': feature,
-                        'Tissue': tissue,
-                        'Mean': mean_val,
-                        'SEM': sem_val,
-                        'N': len(tissue_data)
-                    })
-        
-        plot_df = pd.DataFrame(plot_data)
-        
-        if plot_df.empty:
-            ax.text(0.5, 0.5, 'No data available', 
-                    ha='center', va='center', transform=ax.transAxes)
-            ax.set_title(f'{cell_type}: No Data', fontsize=12)
-            return
-        
-        # 绘制点图
-        sns.pointplot(x='Feature', y='Mean', hue='Tissue', 
-                      data=plot_df, ax=ax, dodge=0.5, 
-                      join=False, errwidth=2, capsize=0.1,
-                      errorbar=('ci', 68))  # 使用SEM作为误差
-        
-        ax.set_title(f'{cell_type}: Mean ± SEM', fontsize=12)
-        ax.set_ylabel('Mean Value')
-        ax.set_xlabel('')
-        ax.tick_params(axis='x', rotation=45)
-        ax.legend(title='Tissue Type')
-        
-        # 添加样本数量标注
-        if 'N' in plot_df.columns:
-            # 在x轴标签上添加样本数量
-            labels = []
-            for feature in plot_df['Feature'].unique():
-                n_normal = plot_df[(plot_df['Feature'] == feature) & 
-                                  (plot_df['Tissue'] == 'normal')]['N'].values
-                n_infil = plot_df[(plot_df['Feature'] == feature) & 
-                                 (plot_df['Tissue'] == 'infiltration')]['N'].values
-                
-                n_normal = n_normal[0] if len(n_normal) > 0 else 0
-                n_infil = n_infil[0] if len(n_infil) > 0 else 0
-                
-                labels.append(f'{feature}\n(N:{n_normal}, I:{n_infil})')
-            
-            ax.set_xticklabels(labels, rotation=45, ha='right')
-    
+   
     def _plot_feature_heatmap(self, ax, data, cell_type):
         """绘制特征差异热图"""
         # 计算log2 fold change
@@ -461,7 +416,7 @@ class CellTypeTissueComparison:
         sns.heatmap(heatmap_data, ax=ax, cmap='RdBu_r', center=0,
                     cbar=False, mask=~significance_mask)
         
-        ax.set_title(f'{cell_type}: log2 Fold Change', fontsize=12)
+        ax.set_title(f'{cell_type}: log2 Fold Change')
         ax.set_ylabel('')
         ax.set_xlabel('Features')
         ax.tick_params(axis='x', rotation=45)
@@ -471,7 +426,7 @@ class CellTypeTissueComparison:
         if cell_type not in self.results:
             ax.text(0.5, 0.5, 'No significant results', 
                     ha='center', va='center', transform=ax.transAxes)
-            ax.set_title(f'{cell_type}: Effect Sizes', fontsize=12)
+            ax.set_title(f'{cell_type}: Effect Sizes')
             return
         
         effect_sizes = []
@@ -499,18 +454,24 @@ class CellTypeTissueComparison:
         # 添加数值标签
         for bar, d in zip(bars, effect_df['Cohen_d']):
             width = bar.get_width()
-            ax.text(width + (0.1 if width >= 0 else -0.3), 
+            ax.text(width + (0.02 if width >= 0 else -0.35), 
                    bar.get_y() + bar.get_height()/2,
-                   f'{d:.2f}', va='center', 
-                   fontsize=8)
+                   f'{d:.2f}', va='center' 
+                   )
         
-        ax.axvline(x=0, color='black', linestyle='-', linewidth=0.5)
-        ax.axvline(x=0.2, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
-        ax.axvline(x=-0.2, color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
+        ax.axvline(x=0, color='black', linestyle='-', linewidth=1)
+        ax.axvline(x=0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+        ax.axvline(x=-0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
         
-        ax.set_title(f'{cell_type}: Cohen\'s d Effect Sizes', fontsize=12)
-        ax.set_xlabel('Cohen\'s d')
-        ax.set_xlim(-1.5, 1.5)
+        ax.set_title(f'{cell_type}: Cohen\'s d Effect Sizes')
+        
+        if cell_type == 'pyramidal':
+            ax.set_xlabel('')
+            ax.set_xticks([])
+            ax.set_xticklabels('')
+        else:
+            ax.set_xlabel('Cohen\'s d')
+        ax.set_xlim(-1., 1.)
     
     def create_summary_table(self):
         """
@@ -663,7 +624,7 @@ def soma_divergence_among_infiltration_and_normal(
         print(f"Significant features (FDR corrected): {len(sig_features)}")
         for feat in sig_features[:5]:  # 只显示前5个显著特征
             info = results[feat]
-            print(f"  {feat}: p={info['adj_p_value']:.4f}, d={info['cohen_d']:.2f}")
+            print(f"  {feat}: p={info['adj_p_value']:.2e}, d={info['cohen_d']:.2f}")
 
 
 if __name__ == '__main__':
