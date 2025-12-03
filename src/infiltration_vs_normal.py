@@ -572,6 +572,10 @@ def morphology_difference_between_infiltration_normal(
         '浸润': 'infiltration'
     })
 
+    # save the meta-information
+    gfs_c_meta = gfs_c[['tissue_type', 'pt_code', 'region', 'cell_type']]
+    gfs_c_meta.to_csv('tissue_cell_meta_jsp.csv', index=True)
+
     ### Plotting
     if 1:
         # Morphological feature difference between normal and infiltrated pyr and non-pyr cells

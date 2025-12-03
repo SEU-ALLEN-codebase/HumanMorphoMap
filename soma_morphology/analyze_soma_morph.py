@@ -214,32 +214,16 @@ class CellTypeTissueComparison:
                 infiltration_data = cell_type_data[cell_type_data[self.tissue_col] == 'infiltration'][feature].dropna()
                 
                 if len(normal_data) > 3 and len(infiltration_data) > 3:
-                    # Shapiro-Wilk正态性检验
-                    _, normal_p = stats.shapiro(normal_data)
-                    _, infil_p = stats.shapiro(infiltration_data)
-                    
-                    is_normal = (normal_p > 0.05) and (infil_p > 0.05)
-                    
-                    # 根据正态性选择合适的检验
-                    if is_normal:
-                        # 独立样本t检验
-                        t_stat, p_value = stats.ttest_ind(normal_data, infiltration_data, equal_var=False)
-                        test_used = 't-test'
-                    else:
-                        # Mann-Whitney U检验
-                        u_stat, p_value = stats.mannwhitneyu(normal_data, infiltration_data)
-                        test_used = 'mannwhitneyu'
+                    # Mann-Whitney U检验
+                    u_stat, p_value = stats.mannwhitneyu(normal_data, infiltration_data, alternative='two-sided')
+                    test_used = 'mannwhitneyu'
+                    is_normal = False
                     
                     # 计算效应量
                     cohen_d = self._calculate_effect_size(normal_data, infiltration_data)
                     
-                    # 计算均值/中位数差异
-                    if is_normal:
-                        mean_diff = normal_data.mean() - infiltration_data.mean()
-                        percent_diff = (mean_diff / normal_data.mean()) * 100 if normal_data.mean() != 0 else np.nan
-                    else:
-                        median_diff = normal_data.median() - infiltration_data.median()
-                        percent_diff = (median_diff / normal_data.median()) * 100 if normal_data.median() != 0 else np.nan
+                    median_diff = normal_data.median() - infiltration_data.median()
+                    percent_diff = (median_diff / normal_data.median()) * 100 if normal_data.median() != 0 else np.nan
                     
                     cell_type_results[feature] = {
                         'p_value': p_value,
@@ -272,7 +256,7 @@ class CellTypeTissueComparison:
         
         if pooled_std == 0:
             return 0
-        return (mean1 - mean2) / pooled_std
+        return (mean2 - mean1) / pooled_std
     
     def _apply_fdr_correction(self, results):
         """对p值进行FDR校正"""
@@ -472,7 +456,7 @@ class CellTypeTissueComparison:
             ax.set_xticklabels('')
         else:
             ax.set_xlabel('Cohen\'s d')
-        ax.set_xlim(-1., 1.)
+        ax.set_xlim(-1.1, 0.9)
     
     def create_summary_table(self):
         """
@@ -605,6 +589,38 @@ def soma_divergence_among_infiltration_and_normal(
         '正常': 'normal',
         '浸润': 'infiltration'
     })
+
+    # Estimate the mean volume/size for each type
+    for tissue_type in np.unique(gfs_c.tissue_type):
+        for cell_type in ctype_dict.values():
+            volumes = gfs_c[(gfs_c.tissue_type == tissue_type) & (gfs_c.cell_type == cell_type)].Volume
+            vol_mean = volumes.mean()
+            rad_mean = np.power(volumes*3/(4*np.pi), 1/3).mean()
+            print(f"Size information for {tissue_type}-{cell_type}:\n"
+                  f"    Total neurons: {len(volumes)}\n"
+                  f"    Mean volume: {vol_mean}\n"
+                  f"    Mean size: {rad_mean}\n")
+        """
+        Size information for infiltration-pyramidal:
+            Total neurons: 64
+            Mean volume: 1005.3320499381251
+            Mean size: 6.013118062406376
+
+        Size information for infiltration-nonpyramidal:
+            Total neurons: 15
+            Mean volume: 1203.0395677662666
+            Mean size: 6.277403685704873
+
+        Size information for normal-pyramidal:
+            Total neurons: 600
+            Mean volume: 1437.7391514297483
+            Mean size: 6.859441023231381
+
+        Size information for normal-nonpyramidal:
+            Total neurons: 114
+            Mean volume: 1340.9893020830525
+            Mean size: 6.711429953871266
+        """
 
     # Do customized comparison
     analyzer = CellTypeTissueComparison(
