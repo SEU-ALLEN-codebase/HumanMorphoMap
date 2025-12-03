@@ -306,6 +306,7 @@ class CellTypeTissueComparison:
         
         for idx, cell_type in enumerate(sorted(self.df[self.cell_type_col].unique(), reverse=True)):
             cell_type_data = self.df[self.df[self.cell_type_col] == cell_type]
+            print(f'Data for {cell_type}: {np.unique(cell_type_data.tissue_type, return_counts=True)}')
             
             if len(cell_type_data) < 10:
                 continue
@@ -359,7 +360,7 @@ class CellTypeTissueComparison:
             path.set_edgecolor('none')
 
         
-        ax.set_title(f'{cell_type}: Feature Distribution')
+        ax.set_title(f'Soma Morphology ({cell_type})')
         ax.set_ylabel('Standardized Value')
         if cell_type == 'pyramidal':
             ax.set_xlabel('')
@@ -426,7 +427,7 @@ class CellTypeTissueComparison:
         if cell_type not in self.results:
             ax.text(0.5, 0.5, 'No significant results', 
                     ha='center', va='center', transform=ax.transAxes)
-            ax.set_title(f'{cell_type}: Effect Sizes')
+            ax.set_title(f'Effect Size ({cell_type})')
             return
         
         effect_sizes = []
@@ -463,7 +464,7 @@ class CellTypeTissueComparison:
         ax.axvline(x=0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
         ax.axvline(x=-0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
         
-        ax.set_title(f'{cell_type}: Cohen\'s d Effect Sizes')
+        ax.set_title(f'Cohen\'s d Effect Size ({cell_type})')
         
         if cell_type == 'pyramidal':
             ax.set_xlabel('')
@@ -508,7 +509,7 @@ class CellTypeTissueComparison:
         summary_df = pd.DataFrame(summary_data)
         
         # 保存到CSV
-        summary_df.to_csv('cell_type_comparison_summary.csv', index=False)
+        summary_df.to_csv('./data/cell_type_comparison_summary.csv', index=False)
         print("Summary table saved to cell_type_comparison_summary.csv")
         
         return summary_df

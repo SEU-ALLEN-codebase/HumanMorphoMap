@@ -196,8 +196,15 @@ def levelwise_infiltration(feat_file, meta_file, meta_JSP, cell_type_file, ihc=0
         
     
 if __name__ == '__main__':
-    in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
-    out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100_levelwise_features.csv'
+    crop = True
+
+    if crop:
+        in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
+        out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100_levelwise_features.csv'
+    else:
+        in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
+        out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_levelwise_features.csv'
+
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
     ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
     meta_file_tissue_JSP = '../meta/meta_samples_JSP_0330.xlsx.csv'
