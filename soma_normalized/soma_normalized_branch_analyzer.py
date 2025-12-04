@@ -9,12 +9,14 @@ import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
+import seaborn as sns
 
 from swc_handler import parse_swc
 from morph_topo.morphology import Morphology, Topology
 
 class BranchAnalyzer:
-    def __init__(self, in_swc):
+    def __init__(self, in_swc, exclude_terminal=True):
+        self.exclude_terminal = exclude_terminal
         self._load_data(in_swc)
 
     def _load_data(self, in_swc):
@@ -29,13 +31,20 @@ class BranchAnalyzer:
 
     def levelwise_features(self):
         ###### level frequency
-        order_counter = Counter(self.topo.order_dict.values())
+        if self.exclude_terminal:
+            tmp_levels = [level for idx, level in self.topo.order_dict.items() if idx not in self.topo.tips]
+            order_counter = Counter(tmp_levels)
+        else:
+            order_counter = Counter(self.topo.order_dict.values())
         # remove level zero
         order_counter.pop(0)
         
         ###### branch length
         bl_dict = {}
         for term_id, branch in self.seg_dict.items():
+            if self.exclude_terminal and term_id in self.topo.tips:
+                continue
+
             current = self.topo.pos_dict[term_id]
             pid = current[6]
             if pid == -1:
@@ -144,35 +153,12 @@ def levelwise_lobes(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
                       out_fig=figname, markersize=8)
 
 
-def levelwise_infiltration(feat_file, meta_file, meta_JSP, cell_type_file, ihc=0, ctype=0):
+def levelwise_infiltration(feat_file, neuron_meta_file, ctype='pyramidal', figstr=''):
     # Parsing the data
     feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
-    meta = pd.read_csv(meta_file, index_col=2, low_memory=False, encoding='gbk')
-    meta['pt_code'] = ['-'.join(ptrsb.split('-')[:2]) for ptrsb in meta.PTRSB]
-    # tissue type 
-    meta_t = pd.read_csv(meta_file_tissue_JSP, index_col=0)
-    meta_t['pt_code'] = meta_t['patient_number'] + '-' + meta_t['tissue_id']
-    meta_t = meta_t.set_index('pt_code')
 
-    meta_cols = ['brain_region', 'age', 'gender', 'immunohistochemistry', 'pt_code']
-    feats[meta_cols] = meta.loc[feats.index][meta_cols]
-
-    # get the cell types and ihc status
-    ctypes = pd.read_csv(ctype_file, index_col=0, low_memory=False)
-    ctypes.index = [int(ctype[:5]) for ctype in ctypes.index]
-    # ihc
-    ihc_mask = feats.immunohistochemistry == ihc
-    #ctype_mask = ctypes.loc[feats.index, 'CLS2'] == str(ctype)
-    ctype_mask = (ctypes.loc[feats.index, 'CLS2'] == str(ctype)) & \
-                 (ctypes.loc[feats.index, 'num_annotator'] >= 2)
-    # in tissue
-    tissue_mask = feats.pt_code.isin(meta_t.index)
-
-    feats = feats[ihc_mask & ctype_mask & tissue_mask]
-    feats['tissue_type'] = meta_t.loc[feats['pt_code'], 'tissue_type'].replace({
-        '正常': 'normal',
-        '浸润': 'infiltration'
-    }).values
+    # loading the neurons and their meta-informations
+    meta = pd.read_csv(neuron_meta_file, index_col=0)
 
     # 
     import sys
@@ -180,39 +166,37 @@ def levelwise_infiltration(feat_file, meta_file, meta_JSP, cell_type_file, ihc=0
     from config import REG2LOBE
     from plotters.customized_plotters import sns_jointplot
     
-    feats['lobe'] = feats.brain_region.map(REG2LOBE)
+    feats[meta.columns] = meta.loc[feats.index]
+    feats = feats[feats.cell_type == ctype]
+    feats['lobe'] = feats.region.map(REG2LOBE)
     
-    for level in range(10):
+    for level in range(4):
         feats_l = feats[feats.level == level].drop(columns='level')
         if len(feats_l) < 10:
             continue
         
-        figname = f'infiltrationVSnormal_level{level}.png'
-        sns_jointplot(feats_l[~feats_l.gender.isna()], x='order_count', 
+        figname = f'infiltrationVSnormal_level{level}_{ctype}_{figstr}.png'
+        sns_jointplot(feats_l, x='order_count', 
                       y='branch_length', xlim=None, ylim=None, hue='tissue_type', 
-                      out_fig=figname, markersize=8)
+                      out_fig=figname, markersize=25, ms_scale=1.)
 
 
         
     
 if __name__ == '__main__':
-    crop = True
 
-    if crop:
-        in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
-        out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100_levelwise_features.csv'
-    else:
-        in_swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
-        out_feat_file = 'auto8.4k_0510_resample1um_mergedBranches0712_levelwise_features.csv'
+    dset = 'scale' # 'scale', 'orig_morph'
+    in_swc_dir = f'./data/{dset}_cropped'
+    out_feat_file = f'./data/{dset}_cropped_levelwise_features.csv'
 
-    meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta/meta.csv'
-    ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
-    meta_file_tissue_JSP = '../meta/meta_samples_JSP_0330.xlsx.csv'
-    ctype = 0   # 0: pyramidal; 1: nonpyramidal
+
+    neuron_meta_file = '../src/tissue_cell_meta_jsp.csv'
 
     #calc_features(in_swc_dir, out_feat_file)
 
     #levelwise_lobes(out_feat_file, meta_file, ctype_file, ihc=0)
 
-    levelwise_infiltration(out_feat_file, meta_file, meta_file_tissue_JSP, ctype_file, ihc=1)
+    sns.set_theme(style='ticks', font_scale=1.5)
+    for ctype in ['pyramidal', 'nonpyramidal']:
+        levelwise_infiltration(out_feat_file, neuron_meta_file, ctype, figstr=dset)
 
