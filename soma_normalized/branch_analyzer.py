@@ -9,7 +9,9 @@ import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
+import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 from swc_handler import parse_swc
 from morph_topo.morphology import Morphology, Topology
@@ -114,89 +116,244 @@ def calc_features(in_swc_dir, out_feat_file):
     
     return df
 
-###### Analyze
-def levelwise_lobes(feat_file, meta_file, cell_type_file, ihc=0, ctype=0):
-    # Parsing the data
-    feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
-    meta = pd.read_csv(meta_file, index_col=2, low_memory=False, encoding='gbk')
 
-    meta_cols = ['brain_region', 'age', 'gender', 'immunohistochemistry']
-    feats[meta_cols] = meta.loc[feats.index][meta_cols]
-
-    # get the cell types and ihc status
-    ctypes = pd.read_csv(ctype_file, index_col=0, low_memory=False)
-    ctypes.index = [int(ctype[:5]) for ctype in ctypes.index]
-    # ihc
-    ihc_mask = feats.immunohistochemistry == ihc
-    #ctype_mask = ctypes.loc[feats.index, 'CLS2'] == str(ctype)
-    ctype_mask = (ctypes.loc[feats.index, 'CLS2'] == str(ctype)) & \
-                 (ctypes.loc[feats.index, 'num_annotator'] >= 2)
-
-    feats = feats[ihc_mask & ctype_mask]
-
-    # 
-    import sys
-    sys.path.append('../src')
-    from config import REG2LOBE
-    from plotters.customized_plotters import sns_jointplot
-    
-    feats['lobe'] = feats.brain_region.map(REG2LOBE)
-    
-    for level in range(10):
-        feats_l = feats[feats.level == level].drop(columns='level')
-        if len(feats_l) < 10:
-            continue
+class BranchLevelVisualization:
+    def __init__(self, feats_orig, feats_scaled):
+        """
+        初始化可视化类 - 每行一种细胞类型，每列一种level，每个单元格内子图上下排列
         
-        figname = f'lobe_level{level}.png'
-        sns_jointplot(feats_l[~feats_l.gender.isna()], x='order_count', 
-                      y='branch_length', xlim=None, ylim=None, hue='lobe', 
-                      out_fig=figname, markersize=8)
+        Args:
+            feats_orig: 原始特征DataFrame
+            feats_scaled: 标准化特征DataFrame
+        """
+        self.feats_orig = feats_orig.copy()
+        self.feats_scaled = feats_scaled.copy()
+        
+        # 确保数据有相同的结构
+        required_cols = ['level', 'order_count', 'branch_length', 'tissue_type', 'cell_type']
+        for df in [self.feats_orig, self.feats_scaled]:
+            for col in required_cols:
+                if col not in df.columns:
+                    raise ValueError(f"Column '{col}' not found in DataFrame")
+        
+        # 设置绘图风格
+        sns.set_theme(style='ticks', font_scale=2)
+        
+    def create_level_comparison_plot(self, cell_types=None, save_path=None):
+        """
+        创建2x3布局，每行一种细胞类型，每列一种level，每个单元格内3个子图上下排列
+        
+        Args:
+            cell_types: 要显示的细胞类型列表，如果为None则显示前2种
+            save_path: 图片保存路径
+        """
+        # 获取细胞类型
+        if cell_types is None:
+            all_cell_types = sorted(self.feats_orig['cell_type'].unique())
+            cell_types = all_cell_types[:2]
+            print(f"显示前2个细胞类型: {cell_types}")
+        
+        if len(cell_types) > 2:
+            print(f"警告: 2x3布局只支持2行，将只显示前2个细胞类型: {cell_types[:2]}")
+            cell_types = cell_types[:2]
+        
+        # 定义要显示的levels
+        levels = [1, 2, 3]
+        
+        # 创建图形 - 调整高度以容纳上下排列的子图
+        fig = plt.figure(figsize=(20, 16))
+        
+        # 创建主网格：行=细胞类型，列=levels (2行 x 3列)
+        main_gs = GridSpec(len(cell_types), len(levels), figure=fig, 
+                          hspace=0.25, wspace=0.15,
+                          top=0.92, bottom=0.08,
+                          left=0.08, right=0.95)
+        
+        # 颜色定义
+        colors = {'normal': '#66c2a5', 'infiltration': '#fc8d62'}
+        
+        # 遍历每个单元格：行=细胞类型，列=level
+        for row_idx, cell_type in enumerate(cell_types):
+            for col_idx, level in enumerate(levels):
+                # 在当前单元格内创建3个子图的子网格（上下排列）
+                cell_gs = GridSpecFromSubplotSpec(3, 1, 
+                                                 subplot_spec=main_gs[row_idx, col_idx],
+                                                 hspace=0.5)  # 上下子图间距
+                
+                # 子图1: orig中branch_length分布（顶部）
+                ax1 = fig.add_subplot(cell_gs[0, 0])
+                self._plot_vertical_kde(self.feats_orig, level, cell_type, 
+                                       'branch_length', ax1, colors, 
+                                       plot_type='orig_branch',
+                                       show_legend=(row_idx==0 and col_idx==0),
+                                       show_y_label=(col_idx==0))
+                
+                # 子图2: scaled中branch_length分布（中间）
+                ax2 = fig.add_subplot(cell_gs[1, 0])
+                self._plot_vertical_kde(self.feats_scaled, level, cell_type,
+                                       'branch_length', ax2, colors,
+                                       plot_type='scaled_branch',
+                                       show_legend=False,
+                                       show_y_label=(col_idx==0))
+                
+                # 子图3: orig中order_count分布（底部）
+                ax3 = fig.add_subplot(cell_gs[2, 0])
+                self._plot_vertical_kde(self.feats_orig, level, cell_type,
+                                       'order_count', ax3, colors,
+                                       plot_type='orig_order',
+                                       show_legend=False,
+                                       show_y_label=(col_idx==0))
+        
+        
+        # 调整布局
+        plt.tight_layout(rect=[0.05, 0.05, 0.95, 0.95])
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"图片已保存至: {save_path}")
+        
+        plt.show()
+    
+    def _plot_vertical_kde(self, df, level, cell_type, column, ax, colors, 
+                          plot_type='orig_branch', show_legend=False, show_y_label=True):
+        """
+        绘制垂直排列的KDE子图
+        
+        Args:
+            df: 数据DataFrame
+            level: 层级
+            cell_type: 细胞类型
+            column: 要绘制的列名
+            ax: 坐标轴
+            colors: 颜色字典
+            plot_type: 子图类型标识
+            show_legend: 是否显示图例
+            show_y_label: 是否显示y轴标签
+        """
+        # 过滤数据
+        data = df[(df['level'] == level) & (df['cell_type'] == cell_type)]
+        
+        if len(data) == 0:
+            ax.text(0.5, 0.5, 'No data', 
+                   ha='center', va='center', transform=ax.transAxes,
+                   fontsize=9, style='italic', alpha=0.7)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            return
+        
+        # 绘制KDE
+        for tissue, color in colors.items():
+            tissue_data = data[data['tissue_type'] == tissue]
+            if len(tissue_data) > 0:
+                sns.kdeplot(data=tissue_data, x=column,
+                           color=color, alpha=0.1, fill=True,
+                           label=tissue.capitalize() if show_legend else '',
+                           ax=ax, linewidth=4, bw_adjust=0.8)
+        
+        # 根据子图类型设置标题
+        title_map = {
+            'orig_branch': 'Original Branch Length',
+            'scaled_branch': 'Scaled Branch Length',
+            'orig_order': 'Original Order Count'
+        }
+        
+        #ax.set_title(title_map.get(plot_type, ''), pad=8)
+        
+        # 简化坐标轴标签
+        if column == 'branch_length':
+            xlabel = r'Length (μm)'
+        else:
+            xlabel = 'Number'
+        
+        ax.set_xlabel('')
+        
+        if show_y_label:
+            ax.set_ylabel('Probility\nDensity')
+        else:
+            ax.set_ylabel('')
+        
+        # 添加网格
+        #ax.grid(True, alpha=0.15, linestyle='--', linewidth=0.5)
+        
+        # 添加样本数量信息
+        n_normal = len(data[data['tissue_type'] == 'normal'])
+        n_infil = len(data[data['tissue_type'] == 'infiltration'])
+        
+        if n_normal + n_infil > 0 and False:
+            # 在右上角添加样本数量
+            ax.text(0.98, 0.95, f'n={n_normal}/{n_infil}',
+                   transform=ax.transAxes,
+                   ha='right', va='top',
+                   bbox=dict(boxstyle='round', facecolor='white', 
+                            alpha=0.8, edgecolor='gray', pad=0.1))
+        
+        # 调整y轴从0开始
+        y_lim = ax.get_ylim()
+        ax.set_ylim(0, y_lim[1] * 1.15)
+        x_lim = ax.get_xlim()
+        ax.set_xlim(0, x_lim[1])
+        
+        # 如果是order_count，设置整数刻度
+        if column == 'order_count':
+            xlim = ax.get_xlim()
+            if xlim[1] - xlim[0] < 15:
+                ticks = np.arange(int(xlim[0]), int(xlim[1]) + 1)
+                ax.set_xticks(ticks)
+        
+        # 显示图例
+        if show_legend:
+            ax.legend(loc='upper right', framealpha=0.9, frameon=False)
+        
+        # 简化边框
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_linewidth(3)
+        ax.spines['left'].set_linewidth(3)
+    
 
+def levelwise_comparison(feat_file_orig, feat_file_scaled, neuron_meta_file):
 
-def levelwise_infiltration(feat_file, neuron_meta_file, ctype='pyramidal', figstr=''):
-    # Parsing the data
-    feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
+    ########## Helper functions ###########
+    def _load_features(feat_file, meta):
+        # Parsing the data
+        feats = pd.read_csv(feat_file, index_col=0, low_memory=False)
+        feats[meta.columns] = meta.loc[feats.index]
+
+        return feats
+
+    ########## End of helper functions ###########
+
 
     # loading the neurons and their meta-informations
     meta = pd.read_csv(neuron_meta_file, index_col=0)
-
-    # 
-    import sys
-    sys.path.append('../src')
-    from config import REG2LOBE
-    from plotters.customized_plotters import sns_jointplot
+    feats_orig = _load_features(feat_file_orig, meta)
+    feats_scaled = _load_features(feat_file_scaled, meta)
     
-    feats[meta.columns] = meta.loc[feats.index]
-    feats = feats[feats.cell_type == ctype]
-    feats['lobe'] = feats.region.map(REG2LOBE)
+    ## Visualization
+    visualizer = BranchLevelVisualization(feats_orig, feats_scaled)
     
-    for level in range(4):
-        feats_l = feats[feats.level == level].drop(columns='level')
-        if len(feats_l) < 10:
-            continue
-        
-        figname = f'infiltrationVSnormal_level{level}_{ctype}_{figstr}.png'
-        sns_jointplot(feats_l, x='order_count', 
-                      y='branch_length', xlim=None, ylim=None, hue='tissue_type', 
-                      out_fig=figname, markersize=25, ms_scale=1.)
+    # 方法1：创建2x3布局（每行一个细胞类型）
+    print("创建2x3布局可视化...")
+    visualizer.create_level_comparison_plot(
+        cell_types=['pyramidal', 'nonpyramidal'],
+        save_path='branch_level_comparison_2x3.png'
+    )
 
-
-        
+       
     
 if __name__ == '__main__':
 
-    dset = 'scale' # 'scale', 'orig_morph'
-    in_swc_dir = f'./data/{dset}_cropped'
-    out_feat_file = f'./data/{dset}_cropped_levelwise_features.csv'
+    swc_dir_scaled = f'./data/scale_cropped'
+    feat_file_scaled = f'./data/scale_cropped_levelwise_features.csv'
+    swc_dir_orig = f'./data/orig_morph_cropped'
+    feat_file_orig = f'./data/orig_morph_cropped_levelwise_features.csv'
 
 
     neuron_meta_file = '../src/tissue_cell_meta_jsp.csv'
 
     #calc_features(in_swc_dir, out_feat_file)
 
-    #levelwise_lobes(out_feat_file, meta_file, ctype_file, ihc=0)
-
-    sns.set_theme(style='ticks', font_scale=1.5)
-    for ctype in ['pyramidal', 'nonpyramidal']:
-        levelwise_infiltration(out_feat_file, neuron_meta_file, ctype, figstr=dset)
+    levelwise_comparison(feat_file_orig, feat_file_scaled, neuron_meta_file)
 

@@ -189,9 +189,6 @@ class CellTypeTissueComparison:
         self.categorical_cols = [cell_type_col, tissue_col, 'region', 'pt_code']
         self.feature_cols = [col for col in df.columns if col not in self.categorical_cols]
         
-        # 设置绘图风格
-        plt.style.use('seaborn-v0_8-darkgrid')
-        sns.set_palette("husl")
     
     def statistical_test(self):
         """
@@ -334,7 +331,8 @@ class CellTypeTissueComparison:
         
         sns.violinplot(x='Feature', y='Value', hue=self.tissue_col,
                        data=melted_data, ax=ax, split=True, inner='box',
-                       palette={'normal': 'lightcoral', 'infiltration': 'gold'},
+                       #palette={'normal': 'lightcoral', 'infiltration': 'gold'},
+                       palette={'normal': '#66c2a5', 'infiltration': '#fc8d62'}
                        )
         # 然后去掉所有violin的轮廓线
         for path in ax.collections:
@@ -352,7 +350,7 @@ class CellTypeTissueComparison:
         else:
             plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
         
-        ax.legend(title='', ncols=2, loc='upper center')
+        ax.legend(title='', ncols=2, loc='upper center', frameon=False)
     
    
     def _plot_feature_heatmap(self, ax, data, cell_type):

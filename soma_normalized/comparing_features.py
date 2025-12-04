@@ -233,7 +233,8 @@ class MorphologyFeatureAnalyzer:
         # 绘制小提琴图
         sns.violinplot(x='Feature', y='Value', hue='tissue_type',
                       data=plot_data, ax=ax, split=True, inner='box',
-                      palette={'normal': 'lightcoral', 'infiltration': 'gold'},
+                      #palette={'normal': 'lightcoral', 'infiltration': 'gold'},
+                      palette={'normal': '#66c2a5', 'infiltration': '#fc8d62'},
                       )
         
         # 然后去掉所有violin的轮廓线
@@ -305,7 +306,7 @@ class MorphologyFeatureAnalyzer:
             ax.set_xticklabels('')
         else:
             ax.set_xlabel('Cohen\'s d')
-        ax.set_xlim(-0.75, 0.85)
+        ax.set_xlim(-0.75, 0.95)
         ax.set_ylim(1.5, -0.5)
         
         # 添加效应量解释
@@ -381,7 +382,7 @@ class MorphologyFeatureAnalyzer:
 if __name__ == "__main__":
     # 创建分析器实例
     analyzer = MorphologyFeatureAnalyzer(
-        feature_file='data/lmfeatures_scale_cropped_renamed.csv',
+        feature_file='data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv',
         meta_file='../src/tissue_cell_meta_jsp.csv'
     )
     

@@ -86,8 +86,8 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         #    }
         #else:
             colors_pal = {
-                'normal': 'lightcoral', 
-                'infiltration': 'gold'
+                'normal': '#66c2a5', 
+                'infiltration': '#fc8d62'
             }
     else:
         colors_pal = None
@@ -395,7 +395,7 @@ def plot_nonpyr_ratios(gfs_c):
     # 绘图设置
     groups = list(np_ratios.keys())
     x_pos = np.arange(len(groups))  # 组的位置
-    colors = ['lightcoral', 'gold']  # 每组颜色
+    colors = ['#66c2a5', '#fc8d62']  # 每组颜色
 
     plt.figure(figsize=(6, 6))  # 正方形图像
     # 绘制柱状图
@@ -611,45 +611,36 @@ def morphology_difference_between_infiltration_normal(
             ##### do variance estimation #######
             #import ipdb; ipdb.set_trace()
             compare_variance_components(gfs_cur)
-            continue
 
         
             ############ Overall statistic tests for each feature
             _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5) # scale=3 for P41, otherwise 2.5
 
-            continue    # skip statistical
 
-            ############ statistical test for neuronal subsets
-            if ctype == 'pyramidal':
-                pt_n, pt_c = np.unique(gfs_cur[gfs_cur.tissue_type == 'normal'].pt_code, 
-                                         return_counts=True)
-                pt_argsort_ids = np.argsort(pt_c)[::-1]
-                print(dict(zip(pt_n, pt_c)))
-                infil_tissues = np.unique(gfs_cur[gfs_cur.tissue_type == 'infiltration'].pt_code).tolist()
-                
-                ntest = 2
-                for iptn in pt_argsort_ids[:ntest]:
-                    pt_code = pt_n[iptn]
-                    pt_count = pt_c[iptn]
-                    gfs_subset = gfs_cur[gfs_cur.pt_code.isin(infil_tissues + [pt_code])].copy()
+            if 0:
+                ############ statistical test for neuronal subsets
+                if ctype == 'pyramidal':
+                    pt_n, pt_c = np.unique(gfs_cur[gfs_cur.tissue_type == 'normal'].pt_code, 
+                                             return_counts=True)
+                    pt_argsort_ids = np.argsort(pt_c)[::-1]
+                    print(dict(zip(pt_n, pt_c)))
+                    infil_tissues = np.unique(gfs_cur[gfs_cur.tissue_type == 'infiltration'].pt_code).tolist()
+                    
+                    ntest = 2
+                    for iptn in pt_argsort_ids[:ntest]:
+                        pt_code = pt_n[iptn]
+                        pt_count = pt_c[iptn]
+                        gfs_subset = gfs_cur[gfs_cur.pt_code.isin(infil_tissues + [pt_code])].copy()
 
-                    _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
-
-            
-            ############ difference among infiltrated neurons from different lobes ##############
-            if ctype == 'pyramidal':
-                # The meta is not that standardized, hand-craft it
-                gfs_tmp = gfs_cur[(gfs_cur.tissue_type == 'infiltration') & 
-                                  (gfs_cur.region.isin(['TL.L', 'PL.L_OL.L']))]
-
-                _plot_separate_features(gfs_tmp, ctype=ctype, hue_name='region', ylim_scale=2.5, pt_code_n=None)
+                        _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
 
 
-            ############ 2D feature distribution
-            out_fig = f'feature_distribution_{ctype}.png'
-            jointfplot(gfs_cur, x='Soma_surface', y='Average Diameter', xlim=(100,3000), 
-                       ylim=(2.5, 4.8), hue='tissue_type', out_fig=out_fig, 
-                       markersize=25, hue_order=None, palette=None)
+            if 0:
+                ############ 2D feature distribution
+                out_fig = f'feature_distribution_{ctype}.png'
+                jointfplot(gfs_cur, x='Soma_surface', y='Average Diameter', xlim=(100,3000), 
+                           ylim=(2.5, 4.8), hue='tissue_type', out_fig=out_fig, 
+                           markersize=25, hue_order=None, palette=None)
 
             #plot_joint_distribution(gfs_cur, 'tissue_type')
 
@@ -667,9 +658,7 @@ if __name__ == '__main__':
     
     if 1:
         meta_file_neuron = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
-        #gf_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/l_measure_result.csv'
-        gf_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_renamed.csv'
-        #gf_file = '../h01-guided-reconstruction/old0708/auto8.4k_0510_pruned_resample1um.csv'
+        gf_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv'
         ctype_file = '../meta/cell_type_annotation_8.4K_all_CLS2_unique.csv'
         morphology_difference_between_infiltration_normal(meta_file_neuron, meta_file_tissue_JSP, gf_file, ctype_file, ihc=1)
 
