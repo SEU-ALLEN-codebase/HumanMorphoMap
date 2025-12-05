@@ -32,11 +32,11 @@ class MorphologyFeatureAnalyzer:
         self.df = pd.merge(self.features_df, self.meta_df, 
                           left_index=True, right_index=True, how='inner')
         self.df = self.df.reset_index()
-        self.df.rename(columns={
-                        'index': 'cell_id',
-                        'Average Diameter': 'Average\nDiameter',
-                        'Total Length': 'Total  \nLength'
-        }, inplace=True)
+        #self.df.rename(columns={
+        #                'index': 'cell_id',
+        #                'Average Diameter': 'Average\nDiameter',
+        #                'Total Length': 'Total  \nLength'
+        #}, inplace=True)
         
         
         # 删除多余的ID列
@@ -44,9 +44,8 @@ class MorphologyFeatureAnalyzer:
             self.df = self.df.drop('ID', axis=1)
 
         self.cmp_features = [
-            'Average\nDiameter',
-            'Total  \nLength',
-            #'Number of Branches'
+            'Average Diameter',
+            'Total Length',
         ]
         
         # 获取特征列（排除ID和元数据列）
@@ -60,7 +59,7 @@ class MorphologyFeatureAnalyzer:
         print(f"  组织类型: {self.df['tissue_type'].unique().tolist()}")
         
         # 设置绘图风格
-        sns.set_theme(style='ticks', font_scale=1.5)
+        sns.set_theme(style='ticks', font_scale=1.7)
     
     def statistical_analysis(self):
         """
@@ -176,11 +175,11 @@ class MorphologyFeatureAnalyzer:
         n_cell_types = len(self.df['cell_type'].unique())
         
         # 创建大图
-        fig = plt.figure(figsize=(12, 5 * n_cell_types))
+        fig = plt.figure(figsize=(16, 5 * n_cell_types))
         
         # 创建2列的网格规格，宽度比例为0.6:0.4
         gs = fig.add_gridspec(n_cell_types, 2, 
-                             hspace=0.3, wspace=0.4,
+                             hspace=0.4, wspace=0.65,
                              width_ratios=[0.6, 0.4])
         
         for idx, cell_type in enumerate(sorted(self.df['cell_type'].unique(), reverse=True)):
@@ -246,14 +245,21 @@ class MorphologyFeatureAnalyzer:
        
         # 设置左侧y轴
         ax.set_ylabel('Standardized Value')
-        ax.set_ylim(-3.5, 5)
-        if cell_type == 'pyramidal':
-            ax.set_xlabel('')
-            ax.set_xticks([])
-        else:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.set_ylim(-3.5, 5.5)
+        #if cell_type == 'pyramidal':
+        #    ax.set_xlabel('')
+        #    ax.set_xticks([])
+        #else:
+        #plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.set_xticks([0, 1], ['Average Diameter', 'Total Length'])
 
-        ax.legend(title='', ncols=2, loc='upper right', frameon=False)
+        spine_wd = 2
+        ax.spines['left'].set_linewidth(spine_wd)
+        ax.spines['right'].set_linewidth(spine_wd)
+        ax.spines['bottom'].set_linewidth(spine_wd)
+        ax.spines['top'].set_linewidth(spine_wd)
+
+        ax.legend(title='', ncols=1, loc='upper center', frameon=False)
         
     
     def _plot_effect_size_bar(self, ax, cell_type, idx, features):
@@ -290,7 +296,7 @@ class MorphologyFeatureAnalyzer:
                    f'{d:.2f}', va='center')
         
         # 添加参考线
-        ax.axvline(x=0, color='black', linestyle='-', linewidth=1.)
+        ax.axvline(x=0, color='black', linestyle='-', linewidth=2.)
         ax.axvline(x=0.2, color='gray', linestyle='--', linewidth=1., alpha=0.5)
         ax.axvline(x=-0.2, color='gray', linestyle='--', linewidth=1., alpha=0.5)
         
@@ -300,14 +306,20 @@ class MorphologyFeatureAnalyzer:
         ax.invert_yaxis()  # 使特征从上到下显示
         
         ax.set_xlabel('Cohen\'s d')
-        if cell_type == 'pyramidal':
-            ax.set_xlabel('')
-            ax.set_xticks([])
-            ax.set_xticklabels('')
-        else:
-            ax.set_xlabel('Cohen\'s d')
+        #if cell_type == 'pyramidal':
+        #    ax.set_xlabel('')
+        #    ax.set_xticks([])
+        #    ax.set_xticklabels('')
+        #else:
+        ax.set_xlabel('Cohen\'s d')
         ax.set_xlim(-0.75, 0.95)
         ax.set_ylim(1.5, -0.5)
+        
+        spine_wd = 2
+        ax.spines['left'].set_linewidth(spine_wd)
+        ax.spines['right'].set_linewidth(spine_wd)
+        ax.spines['bottom'].set_linewidth(spine_wd)
+        ax.spines['top'].set_linewidth(spine_wd)
         
         # 添加效应量解释
         #ax.text(0.02, 0.98, 'Small: |d|<0.5\nMedium: 0.5≤|d|<0.8\nLarge: |d|≥0.8',

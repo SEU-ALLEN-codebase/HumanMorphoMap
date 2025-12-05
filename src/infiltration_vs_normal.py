@@ -140,6 +140,7 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         group1 = gfs_cur[gfs_cur[hue_name] == bin_means[hue_name][0]][feature]
         group2 = gfs_cur[gfs_cur[hue_name] == bin_means[hue_name][1]][feature]
         u_stat, p_value = mannwhitneyu(group1, group2, alternative='two-sided')
+        
         # 绘制横线和星号
         x1, x2 = 0.12, 0.88
         y_min, y_max = y_limits[feature]  # 标注的y轴位置
@@ -152,7 +153,7 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
         y_text = y1 if stars.startswith('*') else y3
         #ax.text((x1+x2)*0.5, y_text, stars, 
         #       ha='center', va='bottom', color='red')
-        print(feature, stars)
+        print(feature, stars, f'{p_value:.3e}')
         
 
         # 设置 y 轴范围（排除异常值）
@@ -189,6 +190,7 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
 
     plt.savefig(figname, dpi=300)
     plt.close()
+
 
 def jointfplot(data, x, y, xlim, ylim, hue, out_fig, markersize=10, 
                      hue_order=None, palette=None, bins=25, density=True):
@@ -576,6 +578,8 @@ def morphology_difference_between_infiltration_normal(
     gfs_c_meta = gfs_c[['tissue_type', 'pt_code', 'region', 'cell_type']]
     gfs_c_meta.to_csv('tissue_cell_meta_jsp.csv', index=True)
 
+    import ipdb; ipdb.set_trace()
+
     ### Plotting
     if 1:
         # Morphological feature difference between normal and infiltrated pyr and non-pyr cells
@@ -614,11 +618,14 @@ def morphology_difference_between_infiltration_normal(
 
         
             ############ Overall statistic tests for each feature
-            _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5) # scale=3 for P41, otherwise 2.5
+            if strict_comp:
+                _plot_separate_features(gfs_cur, ctype=f'{ctype}_p65p66', ylim_scale=2.5)
+            else:
+                _plot_separate_features(gfs_cur, ctype=ctype, ylim_scale=2.5)
 
 
             if 0:
-                ############ statistical test for neuronal subsets
+                ############ statistical test for largest two samples
                 if ctype == 'pyramidal':
                     pt_n, pt_c = np.unique(gfs_cur[gfs_cur.tissue_type == 'normal'].pt_code, 
                                              return_counts=True)
@@ -626,14 +633,43 @@ def morphology_difference_between_infiltration_normal(
                     print(dict(zip(pt_n, pt_c)))
                     infil_tissues = np.unique(gfs_cur[gfs_cur.tissue_type == 'infiltration'].pt_code).tolist()
                     
-                    ntest = 2
-                    for iptn in pt_argsort_ids[:ntest]:
+                    nsamples = 2
+                    for iptn in pt_argsort_ids[:nsamples]:
                         pt_code = pt_n[iptn]
                         pt_count = pt_c[iptn]
                         gfs_subset = gfs_cur[gfs_cur.pt_code.isin(infil_tissues + [pt_code])].copy()
 
-                        _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=2.5, pt_code_n=pt_code)
+                        if pt_code == 'P00041-T001':
+                            ylim_scale = 3
+                        else:
+                            ylim_scale = 2.5
+                        _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=ylim_scale, pt_code_n=pt_code)
 
+            if 1:
+                ######### statistical test for random subsets
+                if ctype == 'pyramidal':
+                    np.random.seed(1024)
+                    random.seed(1024)
+                    infil_tissues = np.unique(gfs_cur[gfs_cur.tissue_type == 'infiltration'].pt_code).tolist()
+                    # random selection of pyramidal neurons
+                    ntrials = 10
+                    pct_sel = 0.5
+      
+                    normal_neurons = gfs_cur[gfs_cur.tissue_type == 'normal']
+                    nsel = int(len(normal_neurons) * pct_sel)
+                    
+                    for itrial in range(ntrials):
+                        sel_ids = random.sample(np.arange(len(normal_neurons)).tolist(), nsel)
+                        sel_normal_neurons = normal_neurons.iloc[sel_ids]
+
+                        # concat to form a new dataframe
+                        df_rand = pd.concat((sel_normal_neurons, gfs_cur[gfs_cur.tissue_type == 'infiltration']))
+                        print(f'\n--> Trial: {itrial}:')
+                        _plot_separate_features(
+                            df_rand, ctype=f'{ctype}_rand{pct_sel}', 
+                            ylim_scale=2.5
+                        )
+                    
 
             if 0:
                 ############ 2D feature distribution
