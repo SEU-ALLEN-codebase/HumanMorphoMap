@@ -51,6 +51,8 @@ class SomaFeatureCalculator:
         except KeyError:
             print(f"Cell ID {cell_id} not found in info file")
         
+        print(cell_id)
+
         # 加载mask
         mask = self._load_mask(cell_info['filename'])
         
@@ -546,7 +548,7 @@ def batch_calculate_features(soma_info_file, out_pkl, cell_ids=None):
 
 # 使用示例
 if __name__ == "__main__":
-    soma_info_file = './data/fitted_soma_info.csv'
+    soma_info_file = './data/fitted_soma_info_8.4k.csv'
     out_pkl = './data/soma_features.pkl'
 
     batch_calculate_features(soma_info_file, out_pkl)

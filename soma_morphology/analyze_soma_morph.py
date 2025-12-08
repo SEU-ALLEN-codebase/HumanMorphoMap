@@ -599,25 +599,45 @@ def soma_divergence_among_infiltration_and_normal(
                   f"    Mean volume: {vol_mean}\n"
                   f"    Mean size: {rad_mean}\n")
         """
+        #Size information for infiltration-pyramidal:
+        #    Total neurons: 64
+        #    Mean volume: 1005.3320499381251
+        #    Mean size: 6.013118062406376
+
+        #Size information for infiltration-nonpyramidal:
+        #    Total neurons: 15
+        #    Mean volume: 1203.0395677662666
+        #    Mean size: 6.277403685704873
+
+        #Size information for normal-pyramidal:
+        #    Total neurons: 600
+        #    Mean volume: 1437.7391514297483
+        #    Mean size: 6.859441023231381
+
+        #Size information for normal-nonpyramidal:
+        #    Total neurons: 114
+        #    Mean volume: 1340.9893020830525
+        #    Mean size: 6.711429953871266
+
         Size information for infiltration-pyramidal:
-            Total neurons: 64
-            Mean volume: 1005.3320499381251
-            Mean size: 6.013118062406376
+            Total neurons: 77
+            Mean volume: 1217.8111526048442
+            Mean size: 6.317660558334493
 
         Size information for infiltration-nonpyramidal:
-            Total neurons: 15
-            Mean volume: 1203.0395677662666
-            Mean size: 6.277403685704873
+            Total neurons: 18
+            Mean volume: 1374.6429797517224
+            Mean size: 6.541582599275184
 
         Size information for normal-pyramidal:
-            Total neurons: 600
-            Mean volume: 1437.7391514297483
-            Mean size: 6.859441023231381
+            Total neurons: 728
+            Mean volume: 1558.0285303933983
+            Mean size: 7.018362170992384
 
         Size information for normal-nonpyramidal:
-            Total neurons: 114
-            Mean volume: 1340.9893020830525
-            Mean size: 6.711429953871266
+            Total neurons: 147
+            Mean volume: 1444.7150612580476
+            Mean size: 6.8742583770965355
         """
 
     # Do customized comparison

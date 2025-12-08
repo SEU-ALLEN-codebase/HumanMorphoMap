@@ -32,11 +32,11 @@ class MorphologyFeatureAnalyzer:
         self.df = pd.merge(self.features_df, self.meta_df, 
                           left_index=True, right_index=True, how='inner')
         self.df = self.df.reset_index()
-        #self.df.rename(columns={
-        #                'index': 'cell_id',
-        #                'Average Diameter': 'Average\nDiameter',
-        #                'Total Length': 'Total  \nLength'
-        #}, inplace=True)
+        self.df.rename(columns={
+                        'index': 'cell_id',
+                        'Average Diameter': 'Avg. Branch\n Diameter',
+                        'Total Length': 'Total  \nLength'
+        }, inplace=True)
         
         
         # 删除多余的ID列
@@ -44,8 +44,8 @@ class MorphologyFeatureAnalyzer:
             self.df = self.df.drop('ID', axis=1)
 
         self.cmp_features = [
-            'Average Diameter',
-            'Total Length',
+            'Avg. Branch\n Diameter',
+            'Total  \nLength',
         ]
         
         # 获取特征列（排除ID和元数据列）
@@ -59,7 +59,7 @@ class MorphologyFeatureAnalyzer:
         print(f"  组织类型: {self.df['tissue_type'].unique().tolist()}")
         
         # 设置绘图风格
-        sns.set_theme(style='ticks', font_scale=1.7)
+        sns.set_theme(style='ticks', font_scale=1.8)
     
     def statistical_analysis(self):
         """
@@ -175,12 +175,12 @@ class MorphologyFeatureAnalyzer:
         n_cell_types = len(self.df['cell_type'].unique())
         
         # 创建大图
-        fig = plt.figure(figsize=(16, 5 * n_cell_types))
+        fig = plt.figure(figsize=(12, 5 * n_cell_types))
         
         # 创建2列的网格规格，宽度比例为0.6:0.4
         gs = fig.add_gridspec(n_cell_types, 2, 
-                             hspace=0.4, wspace=0.65,
-                             width_ratios=[0.6, 0.4])
+                             hspace=0.4, wspace=0.5,
+                             width_ratios=[0.5, 0.45])
         
         for idx, cell_type in enumerate(sorted(self.df['cell_type'].unique(), reverse=True)):
             cell_type_data = self.df[self.df['cell_type'] == cell_type]
@@ -246,12 +246,12 @@ class MorphologyFeatureAnalyzer:
         # 设置左侧y轴
         ax.set_ylabel('Standardized Value')
         ax.set_ylim(-3.5, 5.5)
-        #if cell_type == 'pyramidal':
-        #    ax.set_xlabel('')
-        #    ax.set_xticks([])
+        if cell_type == 'pyramidal':
+            ax.set_xlabel('')
+            #ax.set_xticks([])
         #else:
-        #plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-        ax.set_xticks([0, 1], ['Average Diameter', 'Total Length'])
+            #plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.set_xticks([0, 1], self.cmp_features)
 
         spine_wd = 2
         ax.spines['left'].set_linewidth(spine_wd)
@@ -291,7 +291,7 @@ class MorphologyFeatureAnalyzer:
         # 添加数值标签
         for i, (bar, d) in enumerate(zip(bars, effect_sizes)):
             width = bar.get_width()
-            ax.text(width + (0.02 if width >= 0 else -0.32), 
+            ax.text(width + (0.02 if width >= 0 else -0.35), 
                    bar.get_y() + bar.get_height()/2,
                    f'{d:.2f}', va='center')
         

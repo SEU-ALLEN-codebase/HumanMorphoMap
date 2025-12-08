@@ -14,7 +14,8 @@ from swc_handler import scale_swc, crop_spheric_from_soma, write_swc
 def scale_crop_neurons(
     neuron_meta_file, swc_dir, out_dir,
     size_df = pd.DataFrame(
-            [[6.859441023231381, 6.013118062406376], [6.711429953871266, 6.277403685704873]], 
+            #[[6.859441023231381, 6.013118062406376], [6.711429953871266, 6.277403685704873]], 
+            [[7.018362170992384, 6.317660558334493], [6.8742583770965355, 6.541582599275184]],
             index=['pyramidal', 'nonpyramidal'], columns=['normal', 'infiltration'])
 ):
     # loading the neurons and their meta-informations

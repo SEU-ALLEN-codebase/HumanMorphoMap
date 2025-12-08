@@ -69,11 +69,11 @@ def correct_lmeasures(lmfile, swc_dir, ex_type='Soma'):
         
 
 if __name__ == '__main__':
-    #lmfile = '../soma_normalized/data/lmfeatures_scale_cropped_renamed.csv'
-    #swc_dir = '../soma_normalized/data/scale_cropped'
-    lmfile = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv'
-    swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
+    lmfile = '../soma_normalized/data/lmfeatures_scale_cropped.csv'
+    swc_dir = '../soma_normalized/data/scale_cropped'
+    #lmfile = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712.csv'
+    #swc_dir = '../h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712'
     ex_type = 'Soma'
     
-    correct_lmeasures(lmfile, swc_dir)
+    correct_lmeasures(lmfile, swc_dir, ex_type=ex_type)
 

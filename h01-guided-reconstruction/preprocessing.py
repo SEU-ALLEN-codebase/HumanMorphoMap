@@ -60,8 +60,8 @@ if __name__ == '__main__':
         swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100'
         outfile = 'auto8.4k_0510_resample1um_mergedBranches0712_crop100.csv'
 
-        #swc_dir = '/home/lyf/Research/publication/humain10k/HumanMorphoMap/h01-guided-reconstruction/data/manual_resampled1um'
-        #outfile = 'manual_resampled1um.csv'
+        #swc_dir = './data/manual_resampled1um_crop100'
+        #outfile = 'manual_resampled1um_crop100.csv'
 
         ##### for comparison on test-set
         #method = 'skelrec'

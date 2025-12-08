@@ -349,11 +349,11 @@ if __name__ == '__main__':
     feat_file_scaled = f'./data/scale_cropped_levelwise_features.csv'
     swc_dir_orig = f'./data/orig_morph_cropped'
     feat_file_orig = f'./data/orig_morph_cropped_levelwise_features.csv'
-
+    
 
     neuron_meta_file = '../src/tissue_cell_meta_jsp.csv'
 
-    #calc_features(in_swc_dir, out_feat_file)
+    #calc_features(swc_dir_scaled, feat_file_scaled)
 
     levelwise_comparison(feat_file_orig, feat_file_scaled, neuron_meta_file)
 

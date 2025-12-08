@@ -35,11 +35,11 @@ def _plot_separate_features(gfs_cur, ctype, hue_name='tissue_type', ylim_scale=2
     gfs_cur = gfs_cur.copy()
     sns.set_theme(style='ticks', font_scale=1.8)
     display_features = {
-        'Soma_surface': r'Soma surface ($μm^2$)',
+        'Soma_surface': r'Soma Surface ($μm^2$)',
         #'N_stem': 'Number of Stems',
         #'Number of Branches': 'Number of Branches',
         #'Number of Tips': 'Number of Tips',
-        'Average Diameter': 'Avg. Diameter (μm)',
+        'Average Diameter': 'Avg. Branch\nDiameter (μm)',
         'Total Length': 'Total Length (μm)',
         #'Max Branch Order': 'Max Branch Order',
         #a'Average Contraction': 'Avg. Straightness',
@@ -234,8 +234,8 @@ def jointfplot(data, x, y, xlim, ylim, hue, out_fig, markersize=10,
                     palette=palette, s=markersize, alpha=0.7, ax=ax_scatter,
                     legend=False)
     ax_scatter.set(xlim=xlim, ylim=ylim)#, xticks=[], yticks=[])
-    ax_scatter.set_xlabel(r'Soma Surface ($μm^2$)')
-    ax_scatter.set_ylabel(r'Average Diameter ($μm$)')
+    ax_scatter.set_xlabel('Soma Surface ($μm^2$)')
+    ax_scatter.set_ylabel('Avg. Branch\nDiameter ($μm$)')
     
     # Custom legend
     handles, labels = [], []
@@ -578,7 +578,6 @@ def morphology_difference_between_infiltration_normal(
     gfs_c_meta = gfs_c[['tissue_type', 'pt_code', 'region', 'cell_type']]
     gfs_c_meta.to_csv('tissue_cell_meta_jsp.csv', index=True)
 
-    import ipdb; ipdb.set_trace()
 
     ### Plotting
     if 1:
@@ -645,7 +644,7 @@ def morphology_difference_between_infiltration_normal(
                             ylim_scale = 2.5
                         _plot_separate_features(gfs_subset, ctype=ctype, ylim_scale=ylim_scale, pt_code_n=pt_code)
 
-            if 1:
+            if 0:
                 ######### statistical test for random subsets
                 if ctype == 'pyramidal':
                     np.random.seed(1024)

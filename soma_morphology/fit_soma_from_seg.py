@@ -170,6 +170,7 @@ def fit_soma(seg_file, out_dir, df_meta):
     try:
         z_rez, xy_rez = df_meta.loc[cell_id][['z_resolution', 'xy_resolution']] / 1000.0 # to um
     except KeyError:
+        print('----> Could not find resolution...')
         return 
 
     resolution = (z_rez, xy_rez, xy_rez)
@@ -185,8 +186,9 @@ def fit_soma(seg_file, out_dir, df_meta):
     if np.sum(pre_seg) > 0:
         pre_seg = get_the_largest_mask(pre_seg)
     else:
+        print('----> No salient soma found!')
         return 
-
+    
 
     # 1. 找到opening后mask在三个维度的非零坐标范围
     nonzero_coords = np.where(pre_seg > 0)
@@ -427,9 +429,10 @@ def fit_all(seg_dir, out_dir, df_meta, out_file):
 if __name__ == "__main__":
 
     meta_file = '/data/kfchen/trace_ws/paper_trace_result/final_data_and_meta_filter/meta.csv'
-    seg_dir = '/data/kfchen/trace_ws/paper_trace_result/nnunet/proposed_9k/0_seg'
+    #seg_dir = '/data/kfchen/trace_ws/paper_trace_result/nnunet/proposed_9k/0_seg'  # original 8k
+    seg_dir = '/data2/kfchen/tracing_ws/14k_raw_img_data/long_590_test_data_for_nnunet/0_seg'
     out_dir = '/data2/lyf/data/human10k_tmp/data/0_seg_soma-lyf'
-    out_file = 'fitted_soma_info.csv'
+    out_file = 'fitted_soma_info_0.4k.csv'    # 0.4k 
     
     #seg_file = f'{seg_dir}/02764_P025_T01_-S032_LTL_R0613_RJ-20230201_RJ.tif'
 
