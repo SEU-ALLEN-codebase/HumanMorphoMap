@@ -388,12 +388,12 @@ def plot_spatial_angles(swc_dirs, ang_files, datasets):
         sns.set_theme(style='ticks', font_scale=1.8)
         #palette = {'H01-Skel': '#1f77b4', 'ACT-H8K': '#ff7f0e', 'ACT-H8K-O': '#2ca02c'}  # 自定义颜色
         palette = {
-            'ACT-H8K': '#4C72B0',
+            'ACT-H8K-I': '#4C72B0',
             'DeKock': '#8172B2',
             'Allen': '#CCB974',
             'H01-Skel': '#C44E52',
-            'ACT-H8K-O': '#55A868',
-            'ACT-H8K-O-MTG': '#64B5CD'
+            'ACT-H8K': '#55A868',
+            'ACT-H8K-MTG': '#64B5CD'
         }
 
         # 创建绘图对象
@@ -866,7 +866,7 @@ if __name__ == '__main__':
         ang_files = [h01_ang_file, auto_ang_file, 
                      './data/auto8.4k_0510_resample1um_mergedBranches0712_angles.pkl'
                     ]
-        datasets = ['H01-Skel', 'ACT-H8K', 'ACT-H8K-O']
+        datasets = ['H01-Skel', 'ACT-H8K-I', 'ACT-H8K']
 
         # visualize the spatial distributions
         plot_spatial_angles(swc_dirs, ang_files, datasets)

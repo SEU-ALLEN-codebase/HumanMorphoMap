@@ -280,9 +280,9 @@ class CellTypeTissueComparison:
         n_cell_types = len(self.df[self.cell_type_col].unique())
         
         # 创建大图
-        fig = plt.figure(figsize=(14, 5 * n_cell_types))
+        fig = plt.figure(figsize=(15, 6 * n_cell_types))
         
-        gs = fig.add_gridspec(n_cell_types, 2, hspace=0.3, wspace=0.4,
+        gs = fig.add_gridspec(n_cell_types, 2, hspace=0.45, wspace=0.4,
                               width_ratios=[0.6, 0.4])
         
         for idx, cell_type in enumerate(sorted(self.df[self.cell_type_col].unique(), reverse=True)):
@@ -346,64 +346,11 @@ class CellTypeTissueComparison:
         ax.set_ylabel('Standardized Value')
         if cell_type == 'pyramidal':
             ax.set_xlabel('')
-            ax.set_xticks([])
-        else:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        #    ax.set_xticks([])
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
         
         ax.legend(title='', ncols=2, loc='upper center', frameon=False)
-    
    
-    def _plot_feature_heatmap(self, ax, data, cell_type):
-        """绘制特征差异热图"""
-        # 计算log2 fold change
-        fc_data = []
-        
-        for feature in self.feature_cols:
-            normal_mean = data[data[self.tissue_col] == 'normal'][feature].mean()
-            infil_mean = data[data[self.tissue_col] == 'infiltration'][feature].mean()
-            
-            if normal_mean > 0 and infil_mean > 0:
-                fold_change = infil_mean / normal_mean
-                log2_fc = np.log2(fold_change)
-            else:
-                log2_fc = 0
-            
-            # 获取p值
-            if cell_type in self.results and feature in self.results[cell_type]:
-                p_value = self.results[cell_type][feature]['adj_p_value']
-                is_sig = self.results[cell_type][feature]['is_significant_adj']
-            else:
-                p_value = 1.0
-                is_sig = False
-            
-            fc_data.append({
-                'Feature': feature,
-                'log2_FC': log2_fc,
-                'p_value': -np.log10(p_value) if p_value > 0 else 10,
-                'is_significant': is_sig
-            })
-        
-        fc_df = pd.DataFrame(fc_data)
-        fc_df = fc_df.set_index('Feature')
-        
-        # 创建热图数据
-        heatmap_data = fc_df[['log2_FC']].T
-        significance_mask = ~fc_df['is_significant'].values.reshape(1, -1)
-        
-        # 绘制热图
-        sns.heatmap(heatmap_data, ax=ax, cmap='RdBu_r', center=0,
-                    cbar_kws={'label': 'log2(Fold Change)'},
-                    mask=significance_mask, alpha=0.3)
-        
-        # 覆盖绘制显著的特征
-        sns.heatmap(heatmap_data, ax=ax, cmap='RdBu_r', center=0,
-                    cbar=False, mask=~significance_mask)
-        
-        ax.set_title(f'{cell_type}: log2 Fold Change')
-        ax.set_ylabel('')
-        ax.set_xlabel('Features')
-        ax.tick_params(axis='x', rotation=45)
-    
     def _plot_effect_size_bar(self, ax, cell_type, idx):
         """绘制效应量条形图"""
         if cell_type not in self.results:
@@ -448,13 +395,13 @@ class CellTypeTissueComparison:
         
         ax.set_title(f'Cohen\'s d Effect Size ({cell_type})')
         
-        if cell_type == 'pyramidal':
-            ax.set_xlabel('')
-            ax.set_xticks([])
-            ax.set_xticklabels('')
-        else:
-            ax.set_xlabel('Cohen\'s d')
-        ax.set_xlim(-1.1, 0.9)
+        #if cell_type == 'pyramidal':
+        #    ax.set_xlabel('')
+        #    ax.set_xticks([])
+        #    ax.set_xticklabels('')
+        #else:
+        ax.set_xlabel('Cohen\'s d')
+        ax.set_xlim(-0.9, 0.9)
     
     def create_summary_table(self):
         """

@@ -229,7 +229,7 @@ class GBM_DifferentialExpression_FPKM:
         
         return up_genes, down_genes, results_df
     
-    def create_volcano_plot(self, results_df, output_path='./results/volcano_plot.png', font_scale=1.8):
+    def create_volcano_plot(self, results_df, output_path='./figures/volcano_plot.png', font_scale=1.8):
         """创建火山图"""
         plt.figure(figsize=(10, 8))
         sns.set_theme(style='ticks', font_scale=font_scale)
@@ -259,20 +259,21 @@ class GBM_DifferentialExpression_FPKM:
         plt.xlabel('log2 Fold Change (GBM/Normal)')
         plt.ylabel('-log10(Adjusted p-value)')
         plt.title('Volcano Plot: GBM vs Normal Tissue')
-        plt.legend(frameon=False)
+        plt.legend(frameon=False, markerscale=2.5, labelspacing=0.1, 
+                   handletextpad=0.02, borderpad=0.05
+        )
         #plt.grid(True, alpha=0.3)
         
         # 保存图片
         plt.tight_layout()
         plt.savefig(output_path, dpi=300)
-        #plt.show()
         
         print(f"火山图已保存到: {output_path}")
     
 
-    def create_heatmap(self, gbm_data, normal_data, top_n=50, output_path='./results/heatmap.png'):
+    def create_heatmap(self, gbm_data, normal_data, top_n=50, output_path='./figures/heatmap.png'):
         """创建热图显示top差异表达基因（简化版）"""
-        sns.set_theme('ticks', font_scale=1.2)
+        sns.set_theme(style='ticks', font_scale=1.2)
         # 获取top差异表达基因
         top_genes = self.de_results.head(top_n)['gene'].tolist()
 
@@ -305,25 +306,217 @@ class GBM_DifferentialExpression_FPKM:
         
         # 获取colorbar对象并调整标签字体
         cbar = ax.collections[0].colorbar
-        cbar.ax.set_ylabel('Z-score', fontsize=14, fontweight='bold', rotation=270, labelpad=20)
-        cbar.ax.tick_params(labelsize=14)
+        cbar.ax.set_ylabel('Z-score', fontsize=18, rotation=270, labelpad=20)
+        cbar.ax.tick_params(labelsize=16)
         
         plt.title(f'Top {top_n} Differentially Expressed Genes (GBM vs Normal)', 
-                 fontsize=16, fontweight='bold', pad=20)
-        plt.xlabel('Samples', fontsize=18)
-        plt.ylabel('Genes', fontsize=18)
+                 fontsize=24, pad=30)
+        plt.xlabel('Samples', fontsize=22)
+        plt.ylabel('Genes', fontsize=22)
         
         # 添加样本类型分隔线
         gbm_samples_count = gbm_data.shape[1]
         plt.axvline(x=gbm_samples_count, color='white', linewidth=3)
-        plt.text(gbm_samples_count/2, -1, 'GBM Samples', 
-                ha='center', fontsize=13, fontweight='bold')
-        plt.text(gbm_samples_count + normal_data.shape[1]/2, -1, 'Normal Samples',
-                ha='center', fontsize=13, fontweight='bold')
+        plt.text(gbm_samples_count/2, -0.5, 'GBM Samples', 
+                ha='center', fontsize=16)
+        plt.text(gbm_samples_count + normal_data.shape[1]/2, -0.5, 'Normal Samples',
+                ha='center', fontsize=16)
         
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        #plt.show()
+
+    def plot_gbm_gene_barplot(self, log2fc_threshold=1.0, adj_p_threshold=0.05, 
+                         output_path='./figures/gbm_gene_barplot.png'):
+        """
+        绘制已知GBM相关基因的log2FC条形图
+        红色表示显著差异：|log2FC| > threshold && adj.p < threshold
+        """
+        
+        # 已知GBM相关基因列表及其描述
+        gbm_genes_info = {
+            'EGFR': '表皮生长因子受体（常扩增/突变）',
+            'VEGFA': '血管内皮生长因子A（血管生成）',
+            'PTEN': '肿瘤抑制基因（常缺失）',
+            'TP53': '肿瘤抑制基因p53',
+            'IDH1': '异柠檬酸脱氢酶1（突变型预后较好）',
+            'MGMT': 'O6-甲基鸟嘌呤-DNA甲基转移酶',
+            'GFAP': '胶质纤维酸性蛋白（星形胶质细胞标志）',
+            'OLIG2': '少突胶质细胞转录因子',
+            'NES': '巢蛋白（神经干细胞标志）',
+            'SOX2': '干细胞转录因子',
+            'CDK4': '细胞周期蛋白依赖性激酶4',
+            'MDM2': 'p53负调控因子',
+            'CDKN2A': '细胞周期抑制剂（常缺失）',
+            'TERT': '端粒酶逆转录酶（常突变）'
+        }
+        
+        # 检查de_results是否存在
+        if self.de_results is None or len(self.de_results) == 0:
+            print("错误：没有差异表达结果数据")
+            return
+        
+        # 设置基因显示顺序（按照您的输出顺序）
+        gene_order = list(gbm_genes_info.keys())
+        
+        # 收集数据
+        effect_sizes = []
+        sig_status = []
+        p_values = []
+        gene_labels = []
+        found_genes = []
+        
+        results_df = self.de_results.set_index('gene')
+        
+        for gene in gene_order:
+            if gene in results_df.index:
+                row = results_df.loc[gene]
+                effect_sizes.append(row['log2fc'])
+                p_values.append(row['adj_p_value'])
+                
+                # 判断显著性：|log2FC| > threshold && adj.p < threshold
+                is_significant = (abs(row['log2fc']) > log2fc_threshold) and (row['adj_p_value'] < adj_p_threshold)
+                sig_status.append(is_significant)
+                
+                # 创建包含描述的基因标签
+                gene_label = f"{gene}"
+                gene_labels.append(gene_label)
+                found_genes.append(gene)
+            else:
+                print(f"警告：基因 {gene} 未在差异表达结果中找到")
+        
+        if not effect_sizes:
+            print("错误：没有找到任何已知GBM基因的差异表达数据")
+            return
+        
+        # 创建图形
+        fig, ax = plt.subplots(figsize=(12, 10))
+        
+        # 创建条形图
+        x_pos = np.arange(len(effect_sizes))
+        
+        # 设置颜色：显著为红色，不显著为灰色
+        colors = ['#FF6B6B' if sig else '#B0B0B0' for sig in sig_status]  # 红色 vs 浅灰色
+        
+        bars = ax.barh(x_pos, effect_sizes, color=colors, edgecolor='black', 
+                      height=0.6, alpha=0.8)
+        
+        # 添加数值标签和p值标记
+        n_sig = 0
+        for i, (bar, d, p_val, sig) in enumerate(zip(bars, effect_sizes, p_values, sig_status)):
+            width = bar.get_width()
+            
+            # 确定文本位置（在条形的右侧或左侧）
+            if width >= 0:
+                text_x = width + 0.02  # 右侧稍微偏移
+                ha = 'left'
+                color = 'darkred' if sig else 'black'
+            else:
+                text_x = width - 0.02  # 左侧稍微偏移
+                ha = 'right'
+                color = 'darkred' if sig else 'black'
+            
+            
+            # 在条形内部添加p值标记
+            if p_val < 0.001:
+                p_text = '***'
+            elif p_val < 0.01:
+                p_text = '**'
+            elif p_val < 0.05:
+                p_text = '*'
+            else:
+                p_text = 'n.s.'
+            
+            # 添加log2FC值
+            ax.text(text_x, bar.get_y() + bar.get_height()/2,
+                   f'{d:.2f} ({p_text})', va='center', ha=ha, 
+                   color=color, fontsize=16)
+
+            if sig:
+                n_sig += 1
+                
+        # 添加参考线
+        ax.axvline(x=0, color='black', linestyle='-', linewidth=2.5, alpha=0.8)
+        ax.axvline(x=log2fc_threshold, color='red', linestyle='--', 
+                  linewidth=2, alpha=0.75, label=f'FC threshold (±{log2fc_threshold})')
+        ax.axvline(x=-log2fc_threshold, color='red', linestyle='--', 
+                  linewidth=2, alpha=0.75)
+        
+        # 添加显著性区域阴影
+        ax.axvspan(log2fc_threshold, max(effect_sizes) + 0.5, alpha=0.05, 
+                  color='red', label='Significant up-regulation')
+        ax.axvspan(min(effect_sizes) - 0.5, -log2fc_threshold, alpha=0.05, 
+                  color='blue', label='Significant down-regulation')
+        
+        # 设置y轴标签
+        ax.set_yticks(x_pos)
+        ax.set_yticklabels(gene_labels, fontsize=22)
+        ax.invert_yaxis()  # 使特征从上到下显示
+        
+        # 设置x轴标签和范围
+        ax.tick_params(axis='x', labelsize=22)
+        ax.set_xlabel('log2 Fold Change (GBM/Normal)', fontsize=24)
+        
+        # 自动调整x轴范围，给标签留出空间
+        x_min = min(effect_sizes) - 0.5
+        x_max = max(effect_sizes) + 0.5
+        ax.set_xlim(x_min, x_max)
+        
+        # 设置y轴范围
+        ax.set_ylim(len(effect_sizes)-0.5, -0.5)
+        
+        # 添加网格
+        #ax.grid(True, alpha=0.3, linestyle='--', axis='x')
+        
+        # 设置边框粗细
+        spine_wd = 2.5
+        ax.spines['left'].set_linewidth(spine_wd)
+        ax.spines['right'].set_linewidth(spine_wd)
+        ax.spines['bottom'].set_linewidth(spine_wd)
+        ax.spines['top'].set_linewidth(spine_wd)
+        
+        # 添加图例
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#FF6B6B', edgecolor='black', alpha=0.8, 
+                  label=f'Significant (|log2FC|>{log2fc_threshold}, p<{adj_p_threshold})'),
+            Patch(facecolor='#B0B0B0', edgecolor='black', alpha=0.8, 
+                  label='Not significant'),
+            Patch(facecolor='none', edgecolor='red', linestyle='--', linewidth=1.5,
+                  label=f'Fold change threshold (±{log2fc_threshold})')
+        ]
+        
+        ax.legend(handles=legend_elements, loc='best', fontsize=20, 
+                  framealpha=0.9, edgecolor='black')
+        
+        # 添加标题
+        title = f'Differential Expression of Possible GBM-related Genes\n(GBM vs Normal Tissue)'
+        ax.set_title(title, fontsize=26, pad=8)
+        
+        # 调整布局
+        plt.tight_layout()
+        
+        # 保存图形
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        
+        print(f"✓ GBM基因条形图已保存到: {output_path}")
+        
+        # 打印详细信息
+        n_total = len(gbm_genes_info)
+        print(f"\n详细统计信息:")
+        print(f"="*60)
+        print(f"阈值设置: |log2FC| > {log2fc_threshold} & adj.p < {adj_p_threshold}")
+        print(f"分析基因数: {n_total}")
+        print(f"显著差异基因数: {n_sig} ({n_sig/n_total*100:.1f}%)")
+        
+        # 打印显著基因列表
+        print(f"\n显著差异基因列表:")
+        for gene, d, p_val, sig in zip(found_genes, effect_sizes, p_values, sig_status):
+            if sig:
+                direction = "↑上调" if d > 0 else "↓下调"
+                print(f"  {gene:8s}: {direction} (log2FC={d:6.2f}, adj.p={p_val:.2e})")
+        
+        return fig, ax
     
     def run_analysis_pipeline(self, meta_files, fpkm_files, normal_fpkm_file):
         """运行完整分析流程"""
@@ -512,9 +705,10 @@ def main():
     # 创建可视化
     analyzer.create_volcano_plot(analyzer.de_results)
     analyzer.create_heatmap(analyzer.gbm_fpkm, analyzer.normal_fpkm, top_n=50)
+    analyzer.plot_gbm_gene_barplot(log2fc_threshold=1.0, adj_p_threshold=0.05)
     
     # 保存结果
-    analyzer.save_results('./gbm_fpkm_de_results')
+    #analyzer.save_results('./gbm_fpkm_de_results')
     
     # 检查已知GBM标志物
     print("\n" + "=" * 70)
