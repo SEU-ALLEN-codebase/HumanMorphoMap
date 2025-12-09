@@ -46,12 +46,6 @@ class GBM_DifferentialExpression_FPKM:
             else:
                 fpkm_data = pd.read_csv(fpkm_file_path, sep='\t', low_memory=False, index_col=0)
          
-            # 设置gene_name为索引
-            #if 'gene_name' in fpkm_data.columns:
-            #    fpkm_data = fpkm_data.set_index('gene_name')
-            #elif 'Gene_Name' in fpkm_data.columns:
-            #    fpkm_data = fpkm_data.set_index('Gene_Name')
-            
             # 如果提供了样本ID列表，则筛选特定样本
             if sample_ids is not None:
                 # 确保sample_ids在数据中存在的列
@@ -230,7 +224,13 @@ class GBM_DifferentialExpression_FPKM:
         return up_genes, down_genes, results_df
     
     def create_volcano_plot(self, results_df, output_path='./figures/volcano_plot.png', font_scale=1.8):
-        """创建火山图"""
+        """创建火山图
+            The volcano plot exhibit a bimodal distribution rather than a unimodal one. This may be attributed to 
+            the highly divergent expression patterns between normal and tumor tissues. To verify, I checked the 
+            log2FC of several housekeeper genes, and they indeed show values near 0.
+
+            The tested genes are: 'GAPDH', 'ACTB', 'TUBB', 'HPRT1', 'TBP', 'PPIA', 'RPL13A', 'UBC', 'PGK1', 'B2M'
+        """
         plt.figure(figsize=(10, 8))
         sns.set_theme(style='ticks', font_scale=font_scale)
         
