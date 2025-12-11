@@ -121,7 +121,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
             bin_stats = df.groupby('A_bin')[yn].agg(['median', 'mean', 'sem', 'count'])
             bin_stats['bin_center'] = [(interval.left + interval.right)/2 for interval in bin_stats.index]
             bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
-            bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
+            bin_stats.to_csv(f'./neuron_proximity/statistics/{figname}_mean.csv', float_format='%.3f')
 
             # 绘图：点图+误差条（使用实际数值坐标）
             show_mask = bin_stats['bin_center'] < xlim1
