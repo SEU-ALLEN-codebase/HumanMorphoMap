@@ -144,6 +144,7 @@ class MicroEnvironmentFeatureCalculator:
             data = pickle.load(f)
         
         # 处理每个slice的数据
+        duplicate_cells = []
         for slice_name, slice_info in data.items():
             cell_ids, distances = slice_info
             
@@ -161,10 +162,20 @@ class MicroEnvironmentFeatureCalculator:
             
             # 建立细胞到slice的映射
             for cell_id in cell_ids:
+                if cell_id in self.cell_to_slice:
+                    print(cell_id, slice_name, self.cell_to_slice[cell_id])
+                    duplicate_cells.append(cell_id)
                 self.cell_to_slice[cell_id] = slice_name
-        
+
         print(f"加载了 {len(data)} 个slices的距离数据")
-        print(f"总共 {len(self.cell_to_slice)} 个细胞")
+        print(f"总共 {len(self.cell_to_slice) + len(duplicate_cells)} 个细胞")
+
+        # Remove possible duplicate cells with the same indices
+        duplicate_cells = set(duplicate_cells)
+        for cell_id in duplicate_cells:
+            self.cell_to_slice.pop(cell_id)
+        print(f"去除潜在overlap后剩余 {len(self.cell_to_slice)} 个细胞")
+        
         
     def load_soma_features(self):
         """加载soma形态特征"""
@@ -384,6 +395,26 @@ class MicroEnvironmentFeatureCalculator:
         print(f"成功计算了 {len(valid_cell_ids)} 个细胞的{feature_type} ME特征")
         
         return ME_features_df
+
+    def check_alterations(self, df_ME, df_single, fnames):
+        """
+        Check how many neurons are updated
+
+        The neuron numbers along the life-span
+        - total 3051 neurons in the `distance matrix file`. It do not include non-neighboring neurons.
+            - Very interesting: Some neurons are duplicated in `cell id`, so number of unique ids is 2968!
+        - for the 8398 neurons, only 1872 neurons are in the 3051 neurons. The missing neurons may be those not traced.
+        - 
+
+        """
+        f_me = df_ME[fnames]
+        f_single = df_single[fnames]
+        # pairwise comparison
+        diff = f_me.values - f_single.values
+        nalter = (diff.sum(axis=1) > 0).sum()
+
+        print(f'Number of neurons altered: {nalter}')
+        return nalter
     
     def run(self):
         """运行完整的ME特征计算流程"""
@@ -407,9 +438,11 @@ class MicroEnvironmentFeatureCalculator:
         
         # 2. 计算soma ME特征
         soma_ME_df = self.compute_all_ME_features('soma')
+        self.check_alterations(soma_ME_df, self.soma_features_df, self.soma_features)
         
         # 3. 计算形态ME特征
         morpho_ME_df = self.compute_all_ME_features('morphology')
+        self.check_alterations(morpho_ME_df, self.morpho_features_df, self.morpho_features)
         
         # 4. 保存结果
         print("\n保存结果...")
