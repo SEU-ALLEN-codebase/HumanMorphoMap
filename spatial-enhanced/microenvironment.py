@@ -163,7 +163,7 @@ class MicroEnvironmentFeatureCalculator:
             # 建立细胞到slice的映射
             for cell_id in cell_ids:
                 if cell_id in self.cell_to_slice:
-                    print(cell_id, slice_name, self.cell_to_slice[cell_id])
+                    #print(cell_id, slice_name, self.cell_to_slice[cell_id])
                     duplicate_cells.append(cell_id)
                 self.cell_to_slice[cell_id] = slice_name
 
@@ -174,7 +174,7 @@ class MicroEnvironmentFeatureCalculator:
         duplicate_cells = set(duplicate_cells)
         for cell_id in duplicate_cells:
             self.cell_to_slice.pop(cell_id)
-        print(f"去除潜在overlap后剩余 {len(self.cell_to_slice)} 个细胞")
+        print(f"去除潜在混淆后剩余 {len(self.cell_to_slice)} 个细胞")
         
         
     def load_soma_features(self):
@@ -342,7 +342,9 @@ class MicroEnvironmentFeatureCalculator:
         all_features = np.vstack([target_feature.reshape(1, -1), selected_features])
         
         # 计算权重：exp(-d/R)
-        weights = np.exp(-all_distances / self.R)
+        weights = np.exp(-all_distances / (self.R/2))
+        #weights = 1 / (1 + all_distances / (self.R / 5))
+        #print(weights)
         weights = weights / np.sum(weights)  # 归一化
         
         # 6. 计算加权平均特征
@@ -376,6 +378,9 @@ class MicroEnvironmentFeatureCalculator:
         for cell_id in tqdm(cell_ids, desc=f"Processing {feature_type} cells"):
             ME_feature, updated = self.compute_ME_feature(cell_id, feature_type)
             n_updated += updated
+
+            #if n_updated >= 50:
+            #    sys.exit()
             
             if ME_feature is not None:
                 ME_features_list.append(ME_feature)
@@ -391,6 +396,11 @@ class MicroEnvironmentFeatureCalculator:
         ME_features_array = np.array(ME_features_list)
         ME_features_df = pd.DataFrame(ME_features_array, columns=feature_names, index=valid_cell_ids)
         ME_features_df.index.name = 'cell_id'
+
+        if feature_type == 'soma':
+            # keep all other features
+            other_columns = [col for col in self.soma_features_df.columns if col not in feature_names]
+            ME_features_df[other_columns] = self.soma_features_df[other_columns]
         
         print(f"成功计算了 {len(valid_cell_ids)} 个细胞的{feature_type} ME特征")
         
@@ -411,7 +421,7 @@ class MicroEnvironmentFeatureCalculator:
         f_single = df_single[fnames]
         # pairwise comparison
         diff = f_me.values - f_single.values
-        nalter = (diff.sum(axis=1) > 0).sum()
+        nalter = (np.fabs(diff.sum(axis=1)) > 0).sum()
 
         print(f'Number of neurons altered: {nalter}')
         return nalter
@@ -487,7 +497,8 @@ if __name__ == "__main__":
     # 设置文件路径
     distance_file = "./data/pairwise_distance_in_slice.pkl"
     soma_feature_file = "../soma_morphology/data/fitted_soma_info_8.4k.csv"
-    morpho_feature_file = "../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv"
+    #morpho_feature_file = "../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv"
+    morpho_feature_file = '../soma_normalized/data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv'
     
     # 创建计算器并运行
     calculator = MicroEnvironmentFeatureCalculator(
