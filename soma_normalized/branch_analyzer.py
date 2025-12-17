@@ -185,7 +185,7 @@ class BranchLevelVisualization:
                 self._plot_vertical_kde(self.feats_orig, level, cell_type, 
                                        'branch_length', ax1, colors, 
                                        plot_type='orig_branch',
-                                       show_legend=(row_idx==0 and col_idx==0),
+                                       show_legend=False, #(row_idx==0 and col_idx==0),
                                        show_y_label=(col_idx==0))
                 
                 # 子图2: scaled中branch_length分布（中间）
@@ -292,15 +292,20 @@ class BranchLevelVisualization:
         # 调整y轴从0开始
         y_lim = ax.get_ylim()
         ax.set_ylim(0, y_lim[1] * 1.15)
-        x_lim = ax.get_xlim()
-        ax.set_xlim(0, x_lim[1])
+
+        if column == 'order_count':
+            ax.set_xlim(0, 15)
+        else:
+            ax.set_xlim(2, 55)
         
         # 如果是order_count，设置整数刻度
         if column == 'order_count':
             xlim = ax.get_xlim()
             if xlim[1] - xlim[0] < 15:
-                ticks = np.arange(int(xlim[0]), int(xlim[1]) + 1)
+                ticks = np.arange(int(xlim[0]), int(xlim[1]) + 1, 2)
                 ax.set_xticks(ticks)
+        else:
+            ax.set_xticks([2, 20, 40])
         
         # 显示图例
         if show_legend:

@@ -223,7 +223,7 @@ class GBM_DifferentialExpression_FPKM:
         
         return up_genes, down_genes, results_df
     
-    def create_volcano_plot(self, results_df, output_path='./figures/volcano_plot.png', font_scale=1.8):
+    def create_volcano_plot(self, results_df, output_path='./figures/gbm_volcano_plot.png', font_scale=1.8):
         """创建火山图
             The volcano plot exhibit a bimodal distribution rather than a unimodal one. This may be attributed to 
             the highly divergent expression patterns between normal and tumor tissues. To verify, I checked the 
@@ -242,8 +242,10 @@ class GBM_DifferentialExpression_FPKM:
         # 绘制散点图
         for regulation, color in colors.items():
             subset = results_df[results_df['regulation'] == regulation]
+            r_ratio = subset.shape[0] / results_df.shape[0]
+            print(f'{regulation}: {r_ratio*100:.2f}%')
             plt.scatter(subset['log2fc'], subset['neg_log10_p'], 
-                       c=color, s=20, alpha=0.6, label=regulation)
+                       c=color, s=20, alpha=0.6, label=f'{regulation} ({r_ratio*100:.2f}%)')
         
         # 添加阈值线
         plt.axvline(x=1, color='black', linestyle='--', alpha=0.5, linewidth=2)
@@ -258,7 +260,7 @@ class GBM_DifferentialExpression_FPKM:
         
         plt.xlabel('log2 Fold Change (GBM/Normal)')
         plt.ylabel('-log10(Adjusted p-value)')
-        plt.title('Volcano Plot: GBM vs Normal Tissue')
+        plt.title('GBM vs. Normal')
         plt.legend(frameon=False, markerscale=2.5, labelspacing=0.1, 
                    handletextpad=0.02, borderpad=0.05
         )
@@ -441,10 +443,11 @@ class GBM_DifferentialExpression_FPKM:
         ax.axvline(x=-log2fc_threshold, color='red', linestyle='--', 
                   linewidth=2, alpha=0.75)
         
+        xlim0, xlim1 = -1.2, 3.3
         # 添加显著性区域阴影
-        ax.axvspan(log2fc_threshold, max(effect_sizes) + 0.5, alpha=0.05, 
+        ax.axvspan(log2fc_threshold, xlim1, alpha=0.05, 
                   color='red', label='Significant up-regulation')
-        ax.axvspan(min(effect_sizes) - 0.5, -log2fc_threshold, alpha=0.05, 
+        ax.axvspan(xlim0, -log2fc_threshold, alpha=0.05, 
                   color='blue', label='Significant down-regulation')
         
         # 设置y轴标签
@@ -459,7 +462,7 @@ class GBM_DifferentialExpression_FPKM:
         # 自动调整x轴范围，给标签留出空间
         x_min = min(effect_sizes) - 0.5
         x_max = max(effect_sizes) + 0.5
-        ax.set_xlim(x_min, x_max)
+        ax.set_xlim(xlim0, xlim1)
         
         # 设置y轴范围
         ax.set_ylim(len(effect_sizes)-0.5, -0.5)
@@ -478,7 +481,7 @@ class GBM_DifferentialExpression_FPKM:
         from matplotlib.patches import Patch
         legend_elements = [
             Patch(facecolor='#FF6B6B', edgecolor='black', alpha=0.8, 
-                  label=f'Significant (|log2FC|>{log2fc_threshold}, p<{adj_p_threshold})'),
+                  label=f'Significant (|log2FC|>{int(log2fc_threshold)}, p<{adj_p_threshold})'),
             Patch(facecolor='#B0B0B0', edgecolor='black', alpha=0.8, 
                   label='Not significant'),
             Patch(facecolor='none', edgecolor='red', linestyle='--', linewidth=1.5,
@@ -489,7 +492,7 @@ class GBM_DifferentialExpression_FPKM:
                   framealpha=0.9, edgecolor='black')
         
         # 添加标题
-        title = f'Differential Expression of Possible GBM-related Genes\n(GBM vs Normal Tissue)'
+        title = f'Differential Expression of Possible GBM-related Genes\n(GBM vs. Normal)'
         ax.set_title(title, fontsize=26, pad=8)
         
         # 调整布局

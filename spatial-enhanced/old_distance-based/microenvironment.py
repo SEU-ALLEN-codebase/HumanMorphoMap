@@ -497,15 +497,15 @@ if __name__ == "__main__":
     # 设置文件路径
     distance_file = "./data/pairwise_distance_in_slice.pkl"
     soma_feature_file = "../soma_morphology/data/fitted_soma_info_8.4k.csv"
-    #morpho_feature_file = "../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv"
-    morpho_feature_file = '../soma_normalized/data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv'
+    morpho_feature_file = "../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv"
+    #morpho_feature_file = '../soma_normalized/data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv'
     
     # 创建计算器并运行
     calculator = MicroEnvironmentFeatureCalculator(
         distance_file=distance_file,
         soma_feature_file=soma_feature_file,
         morpho_feature_file=morpho_feature_file,
-        R=1359.8
+        R=3000.,#1359.8
     )
     
     soma_ME_df, morpho_ME_df = calculator.run()

@@ -283,7 +283,7 @@ def _plot(dff, num=50, figname='temp', nsample=10000, color='black', overall_dis
         bin_stats = bin_stats[bin_stats['count'] > 50]  # 过滤低计数区间
         bin_stats.to_csv(f'{figname}_mean.csv', float_format='%.3f')
 
-        # 绘图：点图+误差条（使用实际数值坐标
+        # 绘图：点图+误差条（使用实际数值坐标）
         show_mask = bin_stats['bin_center'] < xlim1
         show_mask[0] = False    # to manually match to morphology. update 20251114
         plt.errorbar(x=bin_stats['bin_center'][show_mask],
@@ -550,7 +550,8 @@ def get_subpairs(xys_i, dist_col, fpca_i):
  
 
 def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file, 
-                                     layer='', sample_name='', direction='lateral'):
+                                     layer='', sample_name='', direction='lateral',
+                                     cell_type='pyramidal'):
     # load the coordinates of cells
     adata_st = sc.read(st_file)
     adata_st = norm_and_pca(adata_st, N=50)
@@ -563,10 +564,16 @@ def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file,
     # extract and merge the cell type information into the data
     adata_st.obs['cell_code'] = df_ct.loc[adata_st.obs.index, 'cell_code']
 
+    if cell_type == 'pyramidal':
+        CELL_CODE = 1
+    elif cell_type == 'nonpyramidal':
+        CELL_CODE = 0
+    else:
+        raise ValueError('Incorrect cell type!')
 
     if direction is None:
         # extract the target spots
-        adata_l = adata_st[adata_st.obs.cell_code == 1]
+        adata_l = adata_st[adata_st.obs.cell_code == CELL_CODE]
         print(f'Number of excitatory cells: {adata_l.shape[0]}')
 
         # pure distance-vs-similarity
@@ -591,7 +598,7 @@ def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file,
         )
 
         # extract the target spots
-        adata_l = adata_st[(adata_st.obs.cell_code == 1) & (adata_st.obs['in_layer_mask'] == True)]
+        adata_l = adata_st[(adata_st.obs.cell_code == CELL_CODE) & (adata_st.obs['in_layer_mask'] == True)]
         # Coordinates in layer-corrected space
         xys_l = adata_l.obs[['axial_distances', 'lateral_distances']]
         
@@ -625,15 +632,16 @@ def transcript_vs_distance_sublayers(st_file, lay_img_file, celltype_file,
             dff_groups[name] = pd.DataFrame(np.array([cdists, fdists]).transpose(),
                                            columns=('euclidean_distance', 'feature_distance'))
 
-        figname = f'{sample_name}_{layer}_{direction}'
+        figname = f'{sample_name}_{layer}_{direction}_{cell_type}'
         plot_combined(dff_groups, num=25, figname=figname, restrict_range=False)
 
    
 
 if __name__ == '__main__':
     sample_name = 'P00083'
-    layer = 'L5-L6'
-    direction = None   # options: 'lateral', 'axial', and None
+    layer = 'L4'
+    direction = 'lateral'   # options: 'lateral', 'axial', and None
+    cell_type = 'nonpyramidal'
 
     #adata_file = f'data/spatial_data_{sample_name}_withLaminar.h5ad'
     st_dir = f'cell2loc/{sample_name}'
@@ -642,4 +650,4 @@ if __name__ == '__main__':
     st_file = f'{st_dir}/SpatialModel/st.h5ad'
     celltype_file = f'{st_dir}/predicted_cell_types.csv'
 
-    transcript_vs_distance_sublayers(st_file, layer_img_file, celltype_file, layer=layer, sample_name=sample_name, direction=direction)
+    transcript_vs_distance_sublayers(st_file, layer_img_file, celltype_file, layer=layer, sample_name=sample_name, direction=direction, cell_type=cell_type)

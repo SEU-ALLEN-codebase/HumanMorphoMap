@@ -119,14 +119,14 @@ def extract_cortex(data_path):
     print(adata_new.X.indptr.shape, adata_new.X.dtype)
 
 
-def extract_by_area(area, output_file):
+def extract_by_area(areas, output_file):
     # Extract cells
     input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
 
     # 第一步：确定总细胞数和皮层细胞索引
     adata_lazy = sc.read_h5ad(input_file, backed='r')
     is_cortex = adata_lazy.obs.ROIGroup == 'Cerebral cortex'
-    is_area = adata_lazy.obs.roi == area
+    is_area = adata_lazy.obs.roi.isin(areas)
     is_target = is_cortex & is_area
 
     # remove cell types less than 1% of total cells
@@ -171,12 +171,21 @@ def extract_by_area(area, output_file):
 
 if __name__ == '__main__':
     data_path = 'data/scdata'
-    area = 'Human A44-A45'
-    output_file = os.path.join(data_path, f'sc_{area.split()[-1]}.h5ad')
+    areas = ['Human A5-A7', 'Human A19'] #['Human A44-A45']
+
+    if len(areas) > 1: # In case multiple areas
+        prefix = []
+        for area in areas:
+            prefix.append(area.split()[-1])
+        prefix = '+'.join(prefix)
+    else:
+        prefix = areas[0].split()[-1]
+
+    output_file = os.path.join(data_path, f'sc_{prefix}.h5ad')
 
     if 0:
         #extract_cortex(data_path)
-        extract_by_area(area=area, output_file=output_file)
+        extract_by_area(areas=areas, output_file=output_file)
 
     if 1:
         # filter genes
@@ -199,7 +208,7 @@ if __name__ == '__main__':
         )
 
         # filter the object
-        adata_in_sel = adata_in[:, filtered_mask].copy() # #genes = 11,917
+        adata_in_sel = adata_in[:, filtered_mask].copy() # #genes = 11,917 for A44-45
         # save file temporarily
         adata_in_sel.write(filtered_h5ad, compression=True)
         print(f'Number of genes left: {adata_in_sel.shape[1]}')

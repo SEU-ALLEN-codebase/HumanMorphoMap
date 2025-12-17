@@ -54,7 +54,6 @@ def compile_10x_spatial_data(matrix_h5, positions_csv, scalefactors_json, out_ad
         var=pd.DataFrame(index=features)
     )
 
-
     # Remove possible duplicate genes. To avoid possible errors, I would like to just keep one copy of them.
     dup_genes = adata.var_names[adata.var_names.duplicated(keep='first')].unique()
     keep_genes = ~adata.var_names.duplicated(keep='first')
@@ -131,15 +130,16 @@ if __name__ == '__main__':
 
     if 1:
         # preprocess the data for subsequent analyses
-        data_path = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data'
-        #for sample_id in ['P065_0', 'P065_500']:
-        for sample_id in ['P00117', 'P00083', 'P00089']: #['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
+        #data_path = '/PBshare/SEU-ALLEN/Users/WenYe/Human-Brain-ST-data'
+        data_path = './data/ST-raw'
+        for sample_id in ['P00065_500']:
+        #for sample_id in ['P00117', 'P00083', 'P00089']: #['P00066', 'P00079', 'P00083', 'P00089', 'P00090', 'P00115', 'P00117']:
             print(sample_id)
             matrix_h5 = f'{data_path}/{sample_id}/filtered_feature_bc_matrix.h5'
             position_csv = f'{data_path}/{sample_id}/spatial/tissue_positions.csv'
             scalefactors_json = f'{data_path}/{sample_id}/spatial/scalefactors_json.json'
 
-            out_adata = f'./data/spatial_adata_{sample_id}.h5ad'
+            out_adata = f'./data/layers/spatial_adata_{sample_id}.h5ad'
             #if os.path.exists(out_adata):
             #    continue
         

@@ -394,7 +394,9 @@ class MorphologyFeatureAnalyzer:
 if __name__ == "__main__":
     # 创建分析器实例
     analyzer = MorphologyFeatureAnalyzer(
-        feature_file='data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv',
+        #feature_file='data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv',
+        feature_file = '../spatial-enhanced/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter_ME_notIncludeSelf.csv',
+        #feature_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv',
         meta_file='../src/tissue_cell_meta_jsp.csv'
     )
     

@@ -210,7 +210,7 @@ def load_scRNA_data(sc_data_file, visualize=False):
     return adata
 
 
-def run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, debug=False):
+def run_cell2loc(st_collection_file, sc_data_file, keep_all_genes, sample_name, results_folder, debug=False):
     # Initialize the path
     regression_model_output = 'model_SC'
     st_model_output = 'SpatialModel'
@@ -221,7 +221,10 @@ def run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, 
     os.makedirs(st_path, exist_ok=True)
 
     adata_file_sc = f"{reg_path}/sc.h5ad"
+
     adata_file_st = f"{st_path}/st.h5ad"
+    if keep_all_genes:
+        adata_file_st = f"{st_path}/st_allgenes.h5ad"
 
     if os.path.exists(adata_file_st):
         adata_sc = sc.read_h5ad(adata_file_sc)
@@ -283,15 +286,15 @@ def run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, 
         ############## Prediction #################
         # find shared genes and subset both anndata and reference signatures
         intersect = np.intersect1d(adata_st.var_names, inf_aver.index)
-        adata_st = adata_st[:, intersect].copy()
+        adata_st_i = adata_st[:, intersect].copy()
         inf_aver = inf_aver.loc[intersect, :].copy()
 
         # prepare anndata for cell2location model
-        cell2location.models.Cell2location.setup_anndata(adata=adata_st)#, batch_key="sample")
+        cell2location.models.Cell2location.setup_anndata(adata=adata_st_i)#, batch_key="sample")
 
         ## create and train the model
         mod = cell2location.models.Cell2location(
-            adata_st, cell_state_df=inf_aver,
+            adata_st_i, cell_state_df=inf_aver,
             # the expected average cell abundance: tissue-dependent
             # hyper-prior which can be estimated from paired histology:
             N_cells_per_location=8,
@@ -314,19 +317,27 @@ def run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, 
         plt.savefig('train_loss_st.png', dpi=300); plt.close()
 
         # In this section, we export the estimated cell abundance (summary of the posterior distribution).
-        adata_st = mod.export_posterior(
-            adata_st, sample_kwargs={'num_samples': 1000, 'batch_size': mod.adata.n_obs}
-        )
+        if keep_all_genes:
+            # Use the original section
+            adata_st = mod.export_posterior(
+                adata_st, sample_kwargs={'num_samples': 1000, 'batch_size': mod.adata.n_obs}
+            )
+            # Save anndata object with results
+            adata_st.write(adata_file_st)
+        else:
+            # Use the original section
+            adata_st_i = mod.export_posterior(
+                adata_st_i, sample_kwargs={'num_samples': 1000, 'batch_size': mod.adata.n_obs}
+            )
+            # Save anndata object with results
+            adata_st_i.write(adata_file_st)
 
         print('Save SP model...')
         mod.save(st_path, overwrite=True)
-        # Save anndata object with results
-        adata_st.write(adata_file_st)
 
         #fig = mod.plot_spatial_QC_across_batches()
         #fig.savefig('spatial_qc.png', dpi=300)
     
-
     # Now we use cell2location plotter that allows showing multiple cell types in one panel
     adata_st.obs[adata_st.uns['mod']['factor_names']] = adata_st.obsm['q05_cell_abundance_w_sf']
     # select up to 5 clusters
@@ -401,23 +412,29 @@ def get_pyramidal_cells(predicted_st_file, exist_thr=0.5):
 if __name__ == '__main__':
     st_collection_file = 'Visium_seu.csv'
     results_folder = './cell2loc/'
+    keep_all_genes = True
+
     sample_dict = {
-        'P00083': ('./data/scdata/sc_A44-A45_count5_perc0.15_nonzMean2.0.h5ad', 'cell2loc/P00083/SpatialModel/st.h5ad')
+        'P00083': './data/scdata/sc_A44-A45_count5_perc0.15_nonzMean2.0.h5ad',
+        'P00066': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad',
+        'P00065_0': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad',
+        'P00065_500': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad'
     }
-    sample_name = 'P00083'
-    sc_data_file, predicted_st_file = sample_dict[sample_name]
+    sample_name = 'P00065_500'
+    sc_data_file = sample_dict[sample_name]
 
     DEBUG = False
     
-    if DEBUG:
+    if DEBUG:   # debug only
         n_mini = 10000
-        sc_data_file = f'{sc_data_file[:-5]}_mini{n_mini}.h5ad'
+        #sc_data_file = f'{sc_data_file[:-5]}_mini{n_mini}.h5ad'
+        sc_data_file = 'data/scdata/cortical_cells_rand30w_count5_perc0.15_nonzMean2.0_mini10000.h5ad'
     
-    if 0:
-        # Train the model and predict the posterior cell types
-        run_cell2loc(st_collection_file, sc_data_file, sample_name, results_folder, debug=DEBUG)
-
     if 1:
+        # Train the model and predict the posterior cell types
+        run_cell2loc(st_collection_file, sc_data_file, keep_all_genes, sample_name, results_folder, debug=DEBUG)
+
+    if 0:
         # extract spots mostly with pyramdial cells
         get_pyramidal_cells(predicted_st_file)
 
