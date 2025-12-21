@@ -258,9 +258,9 @@ class GBM_DifferentialExpression_FPKM:
             plt.annotate(row['gene'], (row['log2fc'], row['neg_log10_p']),
                         fontsize=8, alpha=0.85)
         
-        plt.xlabel('log2 Fold Change (GBM/Normal)')
-        plt.ylabel('-log10(Adjusted p-value)')
-        plt.title('GBM vs. Normal')
+        plt.xlabel(r'${log_2}$ Fold Change (Infiltrated/Normal)')
+        plt.ylabel(f'-{r"$log_{10}$"}(Adjusted $p$-value)')
+        #plt.title('GBM vs. Normal')
         plt.legend(frameon=False, markerscale=2.5, labelspacing=0.1, 
                    handletextpad=0.02, borderpad=0.05
         )
@@ -341,13 +341,15 @@ class GBM_DifferentialExpression_FPKM:
             'PTEN': '肿瘤抑制基因（常缺失）',
             'TP53': '肿瘤抑制基因p53',
             'IDH1': '异柠檬酸脱氢酶1（突变型预后较好）',
-            'MGMT': 'O6-甲基鸟嘌呤-DNA甲基转移酶',
+            #'MGMT': 'O6-甲基鸟嘌呤-DNA甲基转移酶',
             'GFAP': '胶质纤维酸性蛋白（星形胶质细胞标志）',
             'OLIG2': '少突胶质细胞转录因子',
             'NES': '巢蛋白（神经干细胞标志）',
             'SOX2': '干细胞转录因子',
             'CDK4': '细胞周期蛋白依赖性激酶4',
             'MDM2': 'p53负调控因子',
+            'ATRX': '染色质重塑蛋白',
+            'CD274': '程序性死亡配体1',
             'CDKN2A': '细胞周期抑制剂（常缺失）',
             'TERT': '端粒酶逆转录酶（常突变）'
         }
@@ -391,7 +393,7 @@ class GBM_DifferentialExpression_FPKM:
             return
         
         # 创建图形
-        fig, ax = plt.subplots(figsize=(12, 10))
+        fig, ax = plt.subplots(figsize=(12, 9))
         
         # 创建条形图
         x_pos = np.arange(len(effect_sizes))
@@ -430,8 +432,9 @@ class GBM_DifferentialExpression_FPKM:
             
             # 添加log2FC值
             ax.text(text_x, bar.get_y() + bar.get_height()/2,
-                   f'{d:.2f} ({p_text})', va='center', ha=ha, 
-                   color=color, fontsize=16)
+                   #f'{d:.2f} ({p_text})', va='center', ha=ha, 
+                    f'{d:.2f}', va='center', ha=ha,
+                   color=color, fontsize=18)
 
             if sig:
                 n_sig += 1
@@ -443,7 +446,7 @@ class GBM_DifferentialExpression_FPKM:
         ax.axvline(x=-log2fc_threshold, color='red', linestyle='--', 
                   linewidth=2, alpha=0.75)
         
-        xlim0, xlim1 = -1.2, 3.3
+        xlim0, xlim1 = -1.4, 3.3
         # 添加显著性区域阴影
         ax.axvspan(log2fc_threshold, xlim1, alpha=0.05, 
                   color='red', label='Significant up-regulation')
@@ -457,7 +460,7 @@ class GBM_DifferentialExpression_FPKM:
         
         # 设置x轴标签和范围
         ax.tick_params(axis='x', labelsize=22)
-        ax.set_xlabel('log2 Fold Change (GBM/Normal)', fontsize=24)
+        ax.set_xlabel(r'${log_2}$ Fold Change (GBM/Normal)', fontsize=24)
         
         # 自动调整x轴范围，给标签留出空间
         x_min = min(effect_sizes) - 0.5
@@ -481,19 +484,19 @@ class GBM_DifferentialExpression_FPKM:
         from matplotlib.patches import Patch
         legend_elements = [
             Patch(facecolor='#FF6B6B', edgecolor='black', alpha=0.8, 
-                  label=f'Significant (|log2FC|>{int(log2fc_threshold)}, p<{adj_p_threshold})'),
+                  label=f'Significant (|{r"$log_2$"}FC|>{int(log2fc_threshold)}, {r"$p$"}<{adj_p_threshold})'),
             Patch(facecolor='#B0B0B0', edgecolor='black', alpha=0.8, 
                   label='Not significant'),
             Patch(facecolor='none', edgecolor='red', linestyle='--', linewidth=1.5,
-                  label=f'Fold change threshold (±{log2fc_threshold})')
+                  label=f'{r"$log_2$"}FC threshold (±{log2fc_threshold})')
         ]
         
         ax.legend(handles=legend_elements, loc='best', fontsize=20, 
                   framealpha=0.9, edgecolor='black')
         
         # 添加标题
-        title = f'Differential Expression of Possible GBM-related Genes\n(GBM vs. Normal)'
-        ax.set_title(title, fontsize=26, pad=8)
+        #title = f'Differential Expression of Possible GBM-related Genes\n(GBM vs. Normal)'
+        #ax.set_title(title, fontsize=26, pad=8)
         
         # 调整布局
         plt.tight_layout()
@@ -724,13 +727,15 @@ def main():
         'PTEN': '肿瘤抑制基因（常缺失）',
         'TP53': '肿瘤抑制基因p53',
         'IDH1': '异柠檬酸脱氢酶1（突变型预后较好）',
-        'MGMT': 'O6-甲基鸟嘌呤-DNA甲基转移酶',
+        #'MGMT': 'O6-甲基鸟嘌呤-DNA甲基转移酶',
         'GFAP': '胶质纤维酸性蛋白（星形胶质细胞标志）',
         'OLIG2': '少突胶质细胞转录因子',
         'NES': '巢蛋白（神经干细胞标志）',
         'SOX2': '干细胞转录因子',
         'CDK4': '细胞周期蛋白依赖性激酶4',
         'MDM2': 'p53负调控因子',
+        'ATRX': '染色质重塑蛋白',
+        'CD274': '程序性死亡配体1',
         'CDKN2A': '细胞周期抑制剂（常缺失）',
         'TERT': '端粒酶逆转录酶（常突变）'
     }
