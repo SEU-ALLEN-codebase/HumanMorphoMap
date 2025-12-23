@@ -172,7 +172,7 @@ def calculate_mannwhitney_pvalues(df, feature_columns, group_col='tissue_type', 
         # 计算效应量（Cohen's d）
         n1, n2 = len(group1_data), len(group2_data)
         pooled_std = np.sqrt(((n1-1)*group1_data.std()**2 + (n2-1)*group2_data.std()**2) / (n1+n2-2))
-        cohens_d = (group1_data.mean() - group2_data.mean()) / pooled_std if pooled_std != 0 else 0
+        cohens_d = (group2_data.mean() - group1_data.mean()) / pooled_std if pooled_std != 0 else 0
         
         # 收集结果
         results.append({
@@ -196,6 +196,28 @@ def calculate_mannwhitney_pvalues(df, feature_columns, group_col='tissue_type', 
     results_df = results_df.sort_values('p_value')
     
     return results_df
+
+def save_legend_separately_summary(ax_diff, ax_pvalue, color_diff, color_pvalue):
+    lines_diff = ax_diff.get_lines()
+    scatters_pvalue = ax_pvalue.collections
+    # 可以手动创建图例
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color=color_diff, label=f"Cohen's {r'$d$'}",
+              markersize=8, linewidth=2.5),
+        Line2D([0], [0], marker='s', color=color_pvalue, label=r'$p$-value',
+              markersize=8, linewidth=2.5),
+        Line2D([0], [0], color=color_pvalue, linestyle='--', 
+              label=r'$p$=0.05', linewidth=3)
+    ]
+    fig_leg = plt.figure(figsize=(2,2))
+    fig_leg.legend(handles=legend_elements,
+               loc='center', frameon=True)
+    fig_leg.gca().set_axis_off()
+    fig_leg.tight_layout()
+
+    fig_leg.savefig('legend_summary.pdf', bbox_inches='tight')
+    plt.close(fig_leg)
 
 
 class BranchLevelVisualization:
@@ -242,28 +264,32 @@ class BranchLevelVisualization:
         levels = [1, 2, 3]
         
         # 创建图形 - 调整高度以容纳上下排列的子图
-        fig = plt.figure(figsize=(20, 16))
+        fig = plt.figure(figsize=(22, 7))
         
         # 创建主网格：行=细胞类型，列=levels (2行 x 3列)
-        main_gs = GridSpec(len(cell_types), len(levels), figure=fig, 
-                          hspace=0.25, wspace=0.15,
+        main_gs = GridSpec(len(cell_types), len(levels)+1, figure=fig, 
+                          hspace=0.7, wspace=0.25,
                           top=0.92, bottom=0.08,
                           left=0.08, right=0.95)
         
         # 颜色定义
         colors = {'normal': '#66c2a5', 'infiltration': '#fc8d62'}
+
+        # 新增：为每种细胞类型存储orig_bl_diff数据
+        diff_data = {cell_type: {'levels': [], 'diffs': [], 'p_values': []} for cell_type in cell_types}
         
         # 遍历每个单元格：行=细胞类型，列=level
         for row_idx, cell_type in enumerate(cell_types):
             for col_idx, level in enumerate(levels):
                 print(f'\n{cell_type}/level{level}:')
                 # 在当前单元格内创建3个子图的子网格（上下排列）
-                cell_gs = GridSpecFromSubplotSpec(3, 1, 
-                                                 subplot_spec=main_gs[row_idx, col_idx],
-                                                 hspace=0.5)  # 上下子图间距
-                
+                #cell_gs = GridSpecFromSubplotSpec(1, 1, 
+                #                                 subplot_spec=main_gs[row_idx, col_idx],
+                #                                 hspace=0.5)  # 上下子图间距
                 # 子图1: orig中branch_length分布（顶部）
-                ax1 = fig.add_subplot(cell_gs[0, 0])
+                #ax1 = fig.add_subplot(cell_gs[0, 0])
+                
+                ax1 = fig.add_subplot(main_gs[row_idx, col_idx])
                 self._plot_vertical_kde(self.feats_orig, level, cell_type, 
                                        'branch_length', ax1, colors, 
                                        plot_type='orig_branch',
@@ -275,9 +301,18 @@ class BranchLevelVisualization:
                 orig_bl_ratio = orig_bl_diff / orig_bl_means.loc["normal"]
                 print(f'  Original branch length diff: {orig_bl_diff.item():.2f}, {orig_bl_ratio.item():.4f}')
                 orig_bl_p = calculate_mannwhitney_pvalues(self.feats_orig[orig_bl_mask], ['branch_length'])
-                print(f'      p-value: {orig_bl_p["p_value"]}')
+                print(f'      p-value: {orig_bl_p["p_value"].item():.4e}')
                 
+                 # 存储数据用于第4列
+                diff_data[cell_type]['levels'].append(level)
+                #diff_data[cell_type]['diffs'].append(orig_bl_diff.item())
+                diff_data[cell_type]['diffs'].append(orig_bl_p["cohens_d"].item())
+                diff_data[cell_type]['p_values'].append(orig_bl_p["p_value"].item())
+
+                # customize the y-lim
+                ax1.set_yticks([0, 0.03, 0.06])
                 
+                """
                 # 子图2: scaled中branch_length分布（中间）
                 ax2 = fig.add_subplot(cell_gs[1, 0])
                 self._plot_vertical_kde(self.feats_scaled, level, cell_type,
@@ -306,7 +341,84 @@ class BranchLevelVisualization:
                 print(f'  Original branch length diff: {orig_bf_diff.item():.2f}, {orig_bf_ratio.item():.4f}')
                 orig_bf_p = calculate_mannwhitney_pvalues(self.feats_orig[orig_bl_mask], ['branch_length'])
                 print(f'      p-value: {orig_bf_p["p_value"]}')
+                """
         
+        # I would like to manually add the statistics of soma to it
+        diff_data['pyramidal']['levels'].insert(0, 0)
+        diff_data['pyramidal']['diffs'].insert(0, -0.43)
+        diff_data['pyramidal']['p_values'].insert(0, 2.3e-6)
+
+        diff_data['nonpyramidal']['levels'].insert(0, 0)
+        diff_data['nonpyramidal']['diffs'].insert(0, -0.105)
+        diff_data['nonpyramidal']['p_values'].insert(0, 0.642)
+        levels = [0,1,2,3]
+
+
+        # 新增：第4列 - 归纳panel（点线图）
+        for row_idx, cell_type in enumerate(cell_types):
+            ax_diff = fig.add_subplot(main_gs[row_idx, 3])  # 第4列（索引3）
+            
+            # 获取该细胞类型的数据
+            levels_data = diff_data[cell_type]['levels']
+            diffs_data = diff_data[cell_type]['diffs']
+            pvalues = diff_data[cell_type]['p_values']
+            
+            # 创建点线图（带误差棒的可选）
+            # 基本点线图
+            color_diff = '#1f77b4'
+            ax_diff.plot(levels_data, diffs_data, 
+                        marker='o', markersize=10, linewidth=3,
+                        color=color_diff,
+                        label=f'Length Changed')
+            
+            # 设置图表属性
+            if row_idx == 0:
+                ax_diff.set_xlabel('')
+            else:
+                ax_diff.set_xlabel('Branch Level')
+            ax_diff.set_ylabel('')
+            #ax_diff.set_title(f'{cell_type}: orig_bl_diff by Level')
+
+            ##### For p-value plot
+            # 右侧y轴：p-value
+            ax_pvalue = ax_diff.twinx()
+            color_pvalue = '#ff7f0e'  # 橙色
+            
+            # p值可以使用散点图表示
+            ax_pvalue.plot(levels_data, pvalues, 
+                             marker='s', color=color_pvalue,
+                             label='p-value', linewidth=3,
+                             markersize=10)
+            
+            # 添加p=0.05显著性阈值线
+            ax_pvalue.axhline(y=0.05, color=color_pvalue, linestyle='--', 
+                             alpha=0.5, linewidth=3)
+            
+            # 设置p值轴（反转，p值越小越显著）
+            ax_pvalue.set_yscale('log')  # 对数尺度更易观察小p值
+            ax_pvalue.invert_yaxis()  # 反转：p值越小越靠上
+            
+            # 右侧y轴属性（无标签）
+            ax_pvalue.set_ylabel('')  # 无右侧y轴标签
+            
+            # 设置x轴刻度
+            ax_diff.set_xticks(levels)
+            
+            # To specify the level 0 is soma
+            xticklabels = [f'Level {l}' for l in levels]
+            xticklabels[0] = 'Level 0\n(Soma)'
+            ax_diff.set_xticklabels(xticklabels)
+            
+            # 设置spine线宽（保持与其他子图一致）
+            spine_wd = 2
+            for ax in [ax_diff, ax_pvalue]:
+                for spine in ax.spines.values():
+                    spine.set_linewidth(spine_wd)
+            
+            # 添加组合图例（可选）
+            if row_idx == 0:  # 只在第一行添加图例
+                save_legend_separately_summary(ax_diff, ax_pvalue, color_diff, color_pvalue)
+
         
         # 调整布局
         plt.tight_layout(rect=[0.05, 0.05, 0.95, 0.95])
@@ -315,7 +427,6 @@ class BranchLevelVisualization:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"图片已保存至: {save_path}")
         
-        plt.show()
     
     def _plot_vertical_kde(self, df, level, cell_type, column, ax, colors, 
                           plot_type='orig_branch', show_legend=False, show_y_label=True):
@@ -348,11 +459,16 @@ class BranchLevelVisualization:
         
         # 绘制KDE
         for tissue, color in colors.items():
+            if tissue == 'normal':
+                label_name = 'Normal'
+            elif tissue == 'infiltration':
+                label_name = 'Infiltrated'
+
             tissue_data = data[data['tissue_type'] == tissue]
             if len(tissue_data) > 0:
                 sns.kdeplot(data=tissue_data, x=column,
                            color=color, alpha=0.1, fill=True,
-                           label=tissue.capitalize() if show_legend else '',
+                           label=label_name if show_legend else '',
                            ax=ax, linewidth=4, bw_adjust=0.8)
         
         # 根据子图类型设置标题
@@ -412,7 +528,9 @@ class BranchLevelVisualization:
         
         # 显示图例
         if show_legend:
-            ax.legend(loc='upper right', framealpha=0.9, frameon=False)
+            print(f'Save legend separately for levels...')
+            ax.set_xlim(40, 100)
+            ax.legend(loc='best', frameon=True)
         
         # 简化边框
         ax.spines['top'].set_visible(False)
