@@ -253,10 +253,10 @@ class GBM_DifferentialExpression_FPKM:
         plt.axhline(y=-np.log10(0.05), color='black', linestyle='--', alpha=0.5, linewidth=2)
         
         # 标记top基因
-        top_genes = results_df.nlargest(20, 'abs_log2fc')
-        for idx, row in top_genes.iterrows():
-            plt.annotate(row['gene'], (row['log2fc'], row['neg_log10_p']),
-                        fontsize=8, alpha=0.85)
+        #top_genes = results_df.nlargest(20, 'abs_log2fc')
+        #for idx, row in top_genes.iterrows():
+        #    plt.annotate(row['gene'], (row['log2fc'], row['neg_log10_p']),
+        #                fontsize=8, alpha=0.85)
         
         plt.xlabel(r'${log_2}$ Fold Change (Infiltrated/Normal)')
         plt.ylabel(f'-{r"$log_{10}$"}(Adjusted $p$-value)')

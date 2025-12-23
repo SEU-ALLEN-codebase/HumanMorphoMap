@@ -342,14 +342,20 @@ class CellTypeTissueComparison:
             path.set_edgecolor('none')
 
         
-        ax.set_title(f'Soma Morphology ({cell_type})')
+        ax.set_title(f'Morphology ({cell_type})')
         ax.set_ylabel('Standardized Value')
-        if cell_type == 'pyramidal':
-            ax.set_xlabel('')
-        #    ax.set_xticks([])
+        ax.set_xlabel('')
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
         
-        ax.legend(title='', ncols=2, loc='upper center', frameon=False)
+        # legend customize
+        handles, labels = ax.get_legend_handles_labels()
+        # 2. 找到目标标签的索引并修改（这里假设是第一个）
+        target_index = 1  # 根据实际情况调整索引
+        labels[target_index] = 'infiltrated'
+
+        # 3. 使用修改后的标签列表重新创建图例
+        ax.legend(handles, labels, title='', ncols=2, loc='upper center', frameon=False)
+        
    
     def _plot_effect_size_bar(self, ax, cell_type, idx):
         """绘制效应量条形图"""

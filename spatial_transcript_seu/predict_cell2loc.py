@@ -253,7 +253,7 @@ def run_cell2loc(st_collection_file, sc_data_file, keep_all_genes, sample_name, 
             mod.train(max_epochs=train_epochs_reg)
             # plot the loss_evaluation
             sns.lineplot(mod.history['elbo_train'])
-            plt.savefig('train_loss_sc.png', dpi=300); plt.close()
+            plt.savefig('train_loss_sc_{sample_name}.png', dpi=300); plt.close()
 
             # export the estimated cell abundance (summary of the posterior distribution)
             mod.export_posterior(adata_sc, sample_kwargs={'num_samples': 1000, 'batch_size':2500})
@@ -314,7 +314,7 @@ def run_cell2loc(st_collection_file, sc_data_file, keep_all_genes, sample_name, 
 
         # plot the ST data training
         sns.lineplot(mod.history['elbo_train'])
-        plt.savefig('train_loss_st.png', dpi=300); plt.close()
+        plt.savefig('train_loss_st_{sample_name}.png', dpi=300); plt.close()
 
         # In this section, we export the estimated cell abundance (summary of the posterior distribution).
         if keep_all_genes:
@@ -415,12 +415,11 @@ if __name__ == '__main__':
     keep_all_genes = True
 
     sample_dict = {
-        'P00083': './data/scdata/sc_A44-A45_count5_perc0.15_nonzMean2.0.h5ad',
         'P00066': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad',
         'P00065_0': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad',
         'P00065_500': './data/scdata/sc_A5-A7+A19_count5_perc0.15_nonzMean2.0.h5ad'
     }
-    sample_name = 'P00065_500'
+    sample_name = 'P00066'
     sc_data_file = sample_dict[sample_name]
 
     DEBUG = False

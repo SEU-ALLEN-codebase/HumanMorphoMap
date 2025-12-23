@@ -364,7 +364,7 @@ def plot_joint_distribution(gfs_cur, hue_name):
     
 
 
-def plot_nonpyr_ratios(gfs_c):
+def plot_nonpyr_ratios(gfs_c):  # may suffer from bias.
     sns.set_theme(style='ticks', font_scale=2.4)
 
     np_ratios = {
@@ -669,13 +669,6 @@ def morphology_difference_between_infiltration_normal(
                             ylim_scale=2.5
                         )
                     
-
-            if 0:
-                ############ 2D feature distribution
-                out_fig = f'feature_distribution_{ctype}.png'
-                jointfplot(gfs_cur, x='Soma_surface', y='Average Diameter', xlim=(100,3000), 
-                           ylim=(2.5, 4.8), hue='tissue_type', out_fig=out_fig, 
-                           markersize=25, hue_order=None, palette=None)
 
             #plot_joint_distribution(gfs_cur, 'tissue_type')
 

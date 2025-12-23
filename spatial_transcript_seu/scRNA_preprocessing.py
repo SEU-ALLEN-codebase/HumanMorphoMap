@@ -6,6 +6,7 @@
 import os
 import glob
 import scanpy as sc
+import anndata as ad
 import numpy as np
 import scipy.sparse as sp
 import h5py
@@ -119,10 +120,15 @@ def extract_cortex(data_path):
     print(adata_new.X.indptr.shape, adata_new.X.dtype)
 
 
-def extract_by_area(areas, output_file):
+def extract_by_area(areas, outfile, cell_type='neuronal'):
     # Extract cells
-    input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
-
+    if cell_type == 'neuronal':
+        input_file = os.path.join(data_path, 'f9ecb4ba-b033-4a93-b794-05e262dc1f59.h5ad')
+    elif cell_type == 'non-neuronal':
+        input_file = os.path.join(data_path, 'c1d05de1-d442-48b1-a32c-86f4f0dc5f82.h5ad')
+    else:
+        raise ValueError("Incorrect cell_type value!")
+    
     # 第一步：确定总细胞数和皮层细胞索引
     adata_lazy = sc.read_h5ad(input_file, backed='r')
     is_cortex = adata_lazy.obs.ROIGroup == 'Cerebral cortex'
@@ -163,7 +169,7 @@ def extract_by_area(areas, output_file):
     adata_new.uns = adata_final.uns.copy()
     adata_new.obsm = adata_final.obsm.copy()
 
-    adata_new.write(output_file, compression=True)   
+    adata_new.write(outfile, compression=True)   
 
     adata_lazy.file.close()
 
@@ -183,11 +189,33 @@ if __name__ == '__main__':
 
     output_file = os.path.join(data_path, f'sc_{prefix}.h5ad')
 
-    if 0:
-        #extract_cortex(data_path)
-        extract_by_area(areas=areas, output_file=output_file)
-
     if 1:
+        #extract_cortex(data_path)
+        cur_outfiles = []
+        cell_types = ['neuronal', 'non-neuronal']
+        for cell_type in cell_types:
+            cur_outfile = output_file[:-5] + f'_{cell_type}.h5ad'
+            cur_outfiles.append(cur_outfile)
+            if not os.path.exists(cur_outfile):
+                extract_by_area(areas=areas, outfile=cur_outfile, cell_type=cell_type)
+
+        # merge this two dataset
+        adatas = []
+        for cur_outfile in cur_outfiles:
+            adatas.append(sc.read(cur_outfile))
+        
+        merged_adata = ad.concat(
+            adatas,
+            axis=0,  # 按行合并（细胞方向）
+            join='outer',  # 或者使用'inner'只保留共同基因
+            label='dataset',  # 添加来源标签
+            keys=cell_types  # 数据集标签
+        )
+        # write to file
+        merged_adata.write(output_file, compression=True)
+        
+
+    if 0:
         # filter genes
         area_h5ad = os.path.join(output_file)
         cell_count_cutoff = 5
@@ -211,5 +239,5 @@ if __name__ == '__main__':
         adata_in_sel = adata_in[:, filtered_mask].copy() # #genes = 11,917 for A44-45
         # save file temporarily
         adata_in_sel.write(filtered_h5ad, compression=True)
-        print(f'Number of genes left: {adata_in_sel.shape[1]}')
+        print(f'Number of genes left: {adata_in_sel.shape[1]} from original {adata_in.shape[1]}')
 
