@@ -12,6 +12,9 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+from scipy.stats import mannwhitneyu
+from scipy.stats import combine_pvalues
+        
 
 from swc_handler import parse_swc
 from morph_topo.morphology import Morphology, Topology
@@ -116,6 +119,84 @@ def calc_features(in_swc_dir, out_feat_file):
     
     return df
 
+def calculate_mannwhitney_pvalues(df, feature_columns, group_col='tissue_type', group1='normal', group2='infiltration'):
+    """
+    计算两组间各特征的Mann-Whitney U检验p值
+    
+    Parameters:
+    -----------
+    df : DataFrame
+        包含特征和分组列的数据框
+    feature_columns : list
+        要检验的特征列名列表
+    group_col : str, default='tissue_type'
+        分组列名
+    group1 : str, default='normal'
+        第一组名称
+    group2 : str, default='infiltration'
+        第二组名称
+        
+    Returns:
+    --------
+    DataFrame: 包含各特征检验结果的表格
+    """
+    results = []
+    
+    for feature in feature_columns:
+        # 提取两组数据
+        group1_data = df[df[group_col] == group1][feature].dropna()
+        group2_data = df[df[group_col] == group2][feature].dropna()
+        
+        # 确保两组都有足够数据
+        if len(group1_data) < 3 or len(group2_data) < 3:
+            print(f"警告: 特征 '{feature}' 的数据量不足，跳过检验")
+            results.append({
+                'feature': feature,
+                'p_value': None,
+                'statistic': None,
+                'group1_size': len(group1_data),
+                'group2_size': len(group2_data),
+                'group1_mean': group1_data.mean() if len(group1_data) > 0 else None,
+                'group2_mean': group2_data.mean() if len(group2_data) > 0 else None
+            })
+            continue
+        
+        # 执行Mann-Whitney U检验
+        # alternative参数可选：'two-sided'（双侧）, 'greater'（group1>group2）, 'less'（group1<group2）
+        statistic, p_value = mannwhitneyu(
+            group1_data, 
+            group2_data,
+            alternative='two-sided'  # 双侧检验
+        )
+        
+        # 计算效应量（Cohen's d）
+        n1, n2 = len(group1_data), len(group2_data)
+        pooled_std = np.sqrt(((n1-1)*group1_data.std()**2 + (n2-1)*group2_data.std()**2) / (n1+n2-2))
+        cohens_d = (group1_data.mean() - group2_data.mean()) / pooled_std if pooled_std != 0 else 0
+        
+        # 收集结果
+        results.append({
+            'feature': feature,
+            'p_value': p_value,
+            'statistic': statistic,
+            'cohens_d': cohens_d,
+            'group1_size': n1,
+            'group2_size': n2,
+            'group1_mean': group1_data.mean(),
+            'group2_mean': group2_data.mean(),
+            'group1_median': group1_data.median(),
+            'group2_median': group2_data.median(),
+            'significance': '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'ns'
+        })
+    
+    # 创建结果DataFrame
+    results_df = pd.DataFrame(results)
+    
+    # 按p值排序（可选）
+    results_df = results_df.sort_values('p_value')
+    
+    return results_df
+
 
 class BranchLevelVisualization:
     def __init__(self, feats_orig, feats_scaled):
@@ -175,6 +256,7 @@ class BranchLevelVisualization:
         # 遍历每个单元格：行=细胞类型，列=level
         for row_idx, cell_type in enumerate(cell_types):
             for col_idx, level in enumerate(levels):
+                print(f'\n{cell_type}/level{level}:')
                 # 在当前单元格内创建3个子图的子网格（上下排列）
                 cell_gs = GridSpecFromSubplotSpec(3, 1, 
                                                  subplot_spec=main_gs[row_idx, col_idx],
@@ -187,6 +269,14 @@ class BranchLevelVisualization:
                                        plot_type='orig_branch',
                                        show_legend=False, #(row_idx==0 and col_idx==0),
                                        show_y_label=(col_idx==0))
+                orig_bl_mask = (self.feats_orig.level==level) & (self.feats_orig.cell_type==cell_type)
+                orig_bl_means = self.feats_orig[orig_bl_mask][['branch_length', 'tissue_type']].groupby('tissue_type').mean()
+                orig_bl_diff = orig_bl_means.loc["infiltration"] - orig_bl_means.loc["normal"]
+                orig_bl_ratio = orig_bl_diff / orig_bl_means.loc["normal"]
+                print(f'  Original branch length diff: {orig_bl_diff.item():.2f}, {orig_bl_ratio.item():.4f}')
+                orig_bl_p = calculate_mannwhitney_pvalues(self.feats_orig[orig_bl_mask], ['branch_length'])
+                print(f'      p-value: {orig_bl_p["p_value"]}')
+                
                 
                 # 子图2: scaled中branch_length分布（中间）
                 ax2 = fig.add_subplot(cell_gs[1, 0])
@@ -195,6 +285,13 @@ class BranchLevelVisualization:
                                        plot_type='scaled_branch',
                                        show_legend=False,
                                        show_y_label=(col_idx==0))
+                norm_bl_mask = (self.feats_scaled.level==level) & (self.feats_scaled.cell_type==cell_type)
+                norm_bl_means = self.feats_scaled[norm_bl_mask][['branch_length', 'tissue_type']].groupby('tissue_type').mean()
+                norm_bl_diff = norm_bl_means.loc["infiltration"] - norm_bl_means.loc["normal"]
+                norm_bl_ratio = norm_bl_diff / norm_bl_means.loc["normal"]
+                print(f'  Normalized branch length diff: {norm_bl_diff.item():.2f}, {norm_bl_ratio.item():.4f}')
+                norm_bl_p = calculate_mannwhitney_pvalues(self.feats_scaled[norm_bl_mask], ['branch_length'])
+                print(f'      p-value: {norm_bl_p["p_value"]}')
                 
                 # 子图3: orig中order_count分布（底部）
                 ax3 = fig.add_subplot(cell_gs[2, 0])
@@ -203,6 +300,12 @@ class BranchLevelVisualization:
                                        plot_type='orig_order',
                                        show_legend=False,
                                        show_y_label=(col_idx==0))
+                orig_bf_means = self.feats_orig[orig_bl_mask][['order_count', 'tissue_type']].groupby('tissue_type').mean()
+                orig_bf_diff = orig_bf_means.loc["infiltration"] - orig_bf_means.loc["normal"]
+                orig_bf_ratio = orig_bf_diff / orig_bf_means.loc["normal"]
+                print(f'  Original branch length diff: {orig_bf_diff.item():.2f}, {orig_bf_ratio.item():.4f}')
+                orig_bf_p = calculate_mannwhitney_pvalues(self.feats_orig[orig_bl_mask], ['branch_length'])
+                print(f'      p-value: {orig_bf_p["p_value"]}')
         
         
         # 调整布局

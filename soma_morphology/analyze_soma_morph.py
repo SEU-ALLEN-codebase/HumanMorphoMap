@@ -399,14 +399,14 @@ class CellTypeTissueComparison:
         ax.axvline(x=0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
         ax.axvline(x=-0.2, color='gray', linestyle='--', linewidth=1, alpha=0.5)
         
-        ax.set_title(f'Cohen\'s d Effect Size ({cell_type})')
+        ax.set_title(f'Cohen\'s {r"$d$"} Effect Size ({cell_type})')
         
         #if cell_type == 'pyramidal':
         #    ax.set_xlabel('')
         #    ax.set_xticks([])
         #    ax.set_xticklabels('')
         #else:
-        ax.set_xlabel('Cohen\'s d')
+        ax.set_xlabel(f'Cohen\'s {r"$d$"}')
         ax.set_xlim(-0.9, 0.9)
     
     def create_summary_table(self):

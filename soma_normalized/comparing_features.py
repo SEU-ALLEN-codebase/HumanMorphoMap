@@ -32,10 +32,12 @@ class MorphologyFeatureAnalyzer:
         self.df = pd.merge(self.features_df, self.meta_df, 
                           left_index=True, right_index=True, how='inner')
         self.df = self.df.reset_index()
+        diameter_name = 'Avg. Branch\n Diameter  '
+        length_name = 'Proximal\nDendrite\nLength '
         self.df.rename(columns={
                         'index': 'cell_id',
-                        'Average Diameter': 'Avg. Branch\n Diameter',
-                        'Total Length': 'Total  \nLength'
+                        'Average Diameter': diameter_name,
+                        'Total Length': length_name
         }, inplace=True)
         
         
@@ -44,8 +46,8 @@ class MorphologyFeatureAnalyzer:
             self.df = self.df.drop('ID', axis=1)
 
         self.cmp_features = [
-            'Avg. Branch\n Diameter',
-            'Total  \nLength',
+            diameter_name,
+            length_name,
         ]
         
         # 获取特征列（排除ID和元数据列）
@@ -197,7 +199,8 @@ class MorphologyFeatureAnalyzer:
             # 左侧面板（占60%宽度）
             # 1. 小提琴图+log2_FC折线图（顶部）
             ax1 = fig.add_subplot(gs[idx, 0])
-            self._plot_violin_boxplot(ax1, cell_type_data, cell_type, significant_features)
+            #self._plot_violin_boxplot(ax1, cell_type_data, cell_type, significant_features)
+            self._plot_boxplot(ax1, cell_type_data, cell_type, significant_features)
             
             # 4. 效应量条形图（底部）
             ax4 = fig.add_subplot(gs[idx, 1])
@@ -209,8 +212,6 @@ class MorphologyFeatureAnalyzer:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Figure saved to {save_path}")
         
-        plt.show()
-    
    
     def _plot_violin_boxplot(self, ax, data, cell_type, features):
         """绘制小提琴图"""
@@ -260,6 +261,73 @@ class MorphologyFeatureAnalyzer:
         ax.spines['top'].set_linewidth(spine_wd)
 
         ax.legend(title='', ncols=1, loc='upper center', frameon=False)
+
+    def _plot_boxplot(self, ax, data, cell_type, features):
+        """绘制箱线图"""
+        # 准备数据（与原代码相同）
+        plot_data = data[['tissue_type'] + features].melt(
+            id_vars=['tissue_type'],
+            var_name='Feature',
+            value_name='Value'
+        )
+
+        # 标准化每个特征的数据（与原代码相同）
+        for feature in features:
+            feature_data = plot_data[plot_data['Feature'] == feature]['Value']
+            if feature_data.std() > 0:
+                plot_data.loc[plot_data['Feature'] == feature, 'Value'] = (
+                    (feature_data - feature_data.mean()) / feature_data.std()
+                )
+
+        # *** 核心改动1：将 sns.violinplot 替换为 sns.boxplot ***
+        # 使用 boxplot，设置 inner='box' 已不再需要
+        print(plot_data.groupby('tissue_type').count())
+        sns.boxplot(x='Feature', y='Value', hue='tissue_type',
+                    data=plot_data, ax=ax,
+                    # palette={'normal': '#66c2a5', 'infiltration': '#fc8d62'},
+                    palette={'normal': '#66c2a5', 'infiltration': '#fc8d62'},
+                    # 可根据需要调整箱线图外观，例如：
+                    linewidth=2,      # 箱线轮廓线宽
+                    fliersize=2,        # 异常点大小
+                    width=0.4,          # 箱体宽度
+                    meanprops={'marker': 'o', 'markerfacecolor': 'red', 'linewidth': 3},
+                    dodge=True,
+                    gap=0.25,
+                    )
+
+        # *** 核心改动2：删除专门处理小提琴图轮廓的循环（共6行）***
+        # for path in ax.collections:
+        #     path.set_linewidth(0)
+        #     path.set_edgecolor('none')
+
+        # 设置左侧y轴（与原代码相同）
+        ax.set_ylabel('Standardized Value')
+        ax.set_ylim(-3.5, 5.5)
+        if cell_type == 'pyramidal':
+            ax.set_xlabel('')
+        else:
+            ax.set_xlabel('Morphological Features')
+
+        customized_xticks = [*self.cmp_features]
+        customized_xticks[1] = 'Proximal Branch\nLength    '
+        ax.set_xticks([0, 1], customized_xticks)
+
+        # 设置坐标轴线宽（与原代码相同）
+        spine_wd = 2
+        ax.spines['left'].set_linewidth(spine_wd)
+        ax.spines['right'].set_linewidth(spine_wd)
+        ax.spines['bottom'].set_linewidth(spine_wd)
+        ax.spines['top'].set_linewidth(spine_wd)
+
+        # legend customize
+        handles, labels = ax.get_legend_handles_labels()
+        # 2. 找到目标标签的索引并修改（这里假设是第一个）
+        target_index = 1  # 根据实际情况调整索引
+        labels[target_index] = 'infiltrated'
+        ax.legend(handles, labels, title='', ncols=2, loc='upper center', frameon=False,
+                  handletextpad=0.2, labelspacing=0, columnspacing=0.75,
+        )
+        
         
     
     def _plot_effect_size_bar(self, ax, cell_type, idx, features):
@@ -305,13 +373,12 @@ class MorphologyFeatureAnalyzer:
         ax.set_yticklabels(features)
         ax.invert_yaxis()  # 使特征从上到下显示
         
-        ax.set_xlabel('Cohen\'s d')
+        ax.set_xlabel(r"Cohen's $d$")
         #if cell_type == 'pyramidal':
         #    ax.set_xlabel('')
         #    ax.set_xticks([])
         #    ax.set_xticklabels('')
         #else:
-        ax.set_xlabel('Cohen\'s d')
         ax.set_xlim(-0.75, 0.95)
         ax.set_ylim(1.5, -0.5)
         
@@ -394,8 +461,8 @@ class MorphologyFeatureAnalyzer:
 if __name__ == "__main__":
     # 创建分析器实例
     analyzer = MorphologyFeatureAnalyzer(
-        #feature_file='data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv',
-        feature_file = '../spatial-enhanced/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter_ME_notIncludeSelf.csv',
+        feature_file='data/lmfeatures_scale_cropped_renamed_noSomaDiameter.csv',
+        #feature_file = '../spatial-enhanced/data/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter_ME_notIncludeSelf.csv',
         #feature_file = '../h01-guided-reconstruction/auto8.4k_0510_resample1um_mergedBranches0712_crop100_renamed_noSomaDiameter.csv',
         meta_file='../src/tissue_cell_meta_jsp.csv'
     )
