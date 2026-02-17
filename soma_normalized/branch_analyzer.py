@@ -299,8 +299,8 @@ class BranchLevelVisualization:
                 orig_bl_means = self.feats_orig[orig_bl_mask][['branch_length', 'tissue_type']].groupby('tissue_type').mean()
                 orig_bl_diff = orig_bl_means.loc["infiltration"] - orig_bl_means.loc["normal"]
                 orig_bl_ratio = orig_bl_diff / orig_bl_means.loc["normal"]
-                print(f'  Original branch length diff: {orig_bl_diff.item():.2f}, {orig_bl_ratio.item():.4f}')
                 orig_bl_p = calculate_mannwhitney_pvalues(self.feats_orig[orig_bl_mask], ['branch_length'])
+                print(f"  Cohen'd: {orig_bl_p['cohens_d'].item():.3f}")
                 print(f'      p-value: {orig_bl_p["p_value"].item():.4e}')
                 
                  # 存储数据用于第4列

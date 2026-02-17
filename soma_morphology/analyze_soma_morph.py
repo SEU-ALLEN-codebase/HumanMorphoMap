@@ -350,8 +350,8 @@ class CellTypeTissueComparison:
         # legend customize
         handles, labels = ax.get_legend_handles_labels()
         # 2. 找到目标标签的索引并修改（这里假设是第一个）
-        target_index = 1  # 根据实际情况调整索引
-        labels[target_index] = 'infiltrated'
+        labels[0] = 'Normal'
+        labels[1] = 'Infiltrated'
 
         # 3. 使用修改后的标签列表重新创建图例
         ax.legend(handles, labels, title='', ncols=2, loc='upper center', frameon=False)
