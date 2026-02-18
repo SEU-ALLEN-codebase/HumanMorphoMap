@@ -45,6 +45,7 @@ cd HumanMorphoMap
 # Create a virtual environment
 conda create -n human_morpho python=3.10
 conda activate human_morpho
+```
 
 # Install dependencies
 **1. Internal Library (`pylib`)**
@@ -53,6 +54,7 @@ This project depends on our internal library, `pylib`. Please clone the reposito
 ```bash
 git clone [https://github.com/SEU-ALLEN-codebase/pylib.git](https://github.com/SEU-ALLEN-codebase/pylib.git)
 export PYTHONPATH=$PYTHONPATH:/path/to/pylib
+```
 
 **2. Standard Dependencies**
 Install the remaining packages via pip.
