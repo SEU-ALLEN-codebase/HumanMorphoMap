@@ -6,6 +6,7 @@
 import os
 import sys
 import glob
+import pickle
 import struct
 import warnings
 import subprocess
@@ -183,7 +184,7 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
     
 
 
-    cell_type = 'nonpyramidal'
+    cell_type = 'pyramidal'
     overall_distribution = False
     if cell_type == 'pyramidal':
         prefix = f'pyramidal_nannot2_ihc{ihc}'
@@ -241,6 +242,9 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
 
     dists_all = []
     fdists_all = []
+
+    coords_all = []
+    indices_all = []
     for hospital in hospitals:
         hos_dir = os.path.join(image_dir, hospital)
         for oper_dir in glob.glob(os.path.join(hos_dir, '*')):
@@ -392,10 +396,21 @@ def find_coordinates(image_dir, meta_n_file, gf_file, cell_type_file, ihc=None):
                     # collect the data
                     dists_all.extend(dists.tolist())
                     fdists_all.extend(fdists.tolist())
+
+                    # save the IDs and coordinates
+                    indices_all.append(indices)
+                    coords_all.append(coords)
+
                     
     df = pd.DataFrame(np.vstack((dists_all, fdists_all)).transpose(), columns=('euclidean_distance', 'feature_distance'))
     df.to_csv(relation_file)
     print(f'Total pairs: {df.shape[0]}')
+
+    coord_info = {}
+    coord_info['coord_list'] = coords_all
+    coord_info['index_list'] = indices_all
+    with open('in-slice_pair_coords.pkl', 'wb') as fp:
+        pickle.dump(coord_info, fp)
 
 
 if __name__ == '__main__':

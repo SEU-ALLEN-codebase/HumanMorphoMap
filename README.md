@@ -57,7 +57,7 @@ export PYTHONPATH=$PYTHONPATH:/path/to/pylib
 ```
 
 **2. Standard Dependencies**
-Install the remaining packages via pip.
+Install the remaining packages via pip. The installation of dependencies should be within minutes, and it was tested on Ubuntu 20.04 and 24.04.
 
 ## User Guide
 The overall structure of the project:
@@ -80,7 +80,7 @@ HumanMorphoMap/
 The source code is organized by function and corresponds directly to the figures in the manuscript. To execute an analysis, simply update the file paths under `if __name__ == '__main__'` in the relevant script.
 
 ## 📂 Data Availability
-* The datasets generated in this study, including automated and manual neuronal reconstructions (.swc format) and spatial transcriptomics data, have been deposited on Zenodo (DOI: 10.5281/zenodo.15189542). Comprehensive metadata is available within the repository and in the Supplementary Information accompanying this manuscript.
+* The datasets generated in this study, including automated and manual neuronal reconstructions (`.swc` format) and spatial transcriptomics data, have been deposited on Zenodo (DOI: 10.5281/zenodo.15189542). Comprehensive metadata is available within the repository and in the Supplementary Information accompanying this manuscript.
 * Bulk transcriptomic data are downloaded from Chinese Glioma Genome Atlas (CGGA) via https://www.cgga.org.cn/download.jsp.
 
 ## 📜 Citation
