@@ -17,6 +17,8 @@ from scipy.ndimage import center_of_mass
 from scipy.spatial.distance import cdist
 import scipy.stats as stats
 from scipy.stats import linregress, mannwhitneyu
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 
 from config import to_PID5, to_TID3
 from file_io import load_image
@@ -490,6 +492,29 @@ def compare_variance_components(gfs_cur):
         print(f"ANOVA p-value: {p_value:.2e}")
         
 
+def run_two_way_anova_interaction(gfs_c, feature='Total Length'):
+    # Create a clean dataframe with no NaNs for the specific feature
+    df_anova = gfs_c[['tissue_type', 'cell_type', feature]].dropna().copy()
+    
+    # Create a new column with the log-transformed feature
+    # Using np.log1p (log(1+x)) to safely handle any zeros
+    df_anova['log_feature'] = np.log1p(df_anova[feature])
+    
+    # Clean up column names for the formula (statsmodels doesn't like spaces)
+    df_anova.rename(columns={'tissue_type': 'Condition', 'cell_type': 'CellType'}, inplace=True)
+    
+    # Formula: log_feature ~ Condition + CellType + Condition:CellType (Interaction)
+    formula = 'log_feature ~ C(Condition) * C(CellType)'
+    
+    # Fit the OLS model
+    model = smf.ols(formula, data=df_anova).fit()
+    
+    # Perform Type II ANOVA (better for unbalanced design like your n=19 vs large n)
+    anova_table = sm.stats.anova_lm(model, typ=2)
+    
+    print(f"\n--- Two-Way ANOVA on Log({feature}) ---")
+    print(anova_table)
+
 def morphology_difference_between_infiltration_normal(
         meta_file_neuron, meta_file_tissue, gf_file, ctype_file, ihc=0
 ):
@@ -573,6 +598,10 @@ def morphology_difference_between_infiltration_normal(
         '正常': 'normal',
         '浸润': 'infiltration'
     })
+
+    run_two_way_anova_interaction(gfs_c, 'Soma_surface')
+    run_two_way_anova_interaction(gfs_c, 'Average Diameter')
+    import ipdb; ipdb.set_trace()   
 
     # save the meta-information
     gfs_c_meta = gfs_c[['tissue_type', 'pt_code', 'region', 'cell_type']]
